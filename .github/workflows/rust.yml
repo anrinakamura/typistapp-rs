@@ -1,0 +1,38 @@
+name: rust
+on:
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cache Cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
+    - name: Cache Cargo build artifacts
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-
+    - name: fmt
+      run: cargo fmt --all -- --check
+    - name: clippy
+      run: cargo clippy -- -D warnings
+    - name: build
+      run: cargo build --verbose
+    - name: test
+      run: cargo test --verbose -- --nocapture
+  
