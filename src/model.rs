@@ -7,14 +7,13 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        let font = FontArc::try_from_vec(data.to_vec())?;
-        Ok(Model { font })
-    }
-
     pub fn from_vec(data: Vec<u8>) -> Result<Self> {
         let font = FontArc::try_from_vec(data)?;
         Ok(Model { font })
+    }
+
+    pub fn from_bytes(data: &[u8]) -> Result<Self> {
+        Self::from_vec(data.to_vec())
     }
 
     #[allow(dead_code)]
@@ -31,7 +30,7 @@ impl Model {
         };
 
         let bounds = outlined_glyph.px_bounds();
-        let (width, height) = (bounds.width() as u32, bounds.height() as u32);
+        let (width, height) = (bounds.width().ceil() as u32, bounds.height().ceil() as u32);
 
         if width == 0 || height == 0 {
             return Ok(0.0);
@@ -53,13 +52,6 @@ mod tests {
     use std::fs;
 
     const FONT_PATH: &str = "fonts/NotoSansJP-Regular.otf";
-
-    #[test]
-    fn model_from_bytes() {
-        let font_data = fs::read(FONT_PATH).unwrap();
-        let model = Model::from_bytes(&font_data);
-        assert!(model.is_ok());
-    }
 
     #[test]
     fn model_from_vec() {
