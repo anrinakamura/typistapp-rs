@@ -1,6 +1,8 @@
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
 
+const F64_ALMOST_ZERO: f64 = 1e-12;
+
 #[allow(dead_code)]
 pub struct Model {
     font: FontArc,
@@ -68,7 +70,7 @@ impl Model {
                 });
 
         let denominator = denom_x.sqrt() * denom_y.sqrt();
-        if denominator == 0.0 {
+        if denominator.abs() < F64_ALMOST_ZERO {
             return None;
         }
 
