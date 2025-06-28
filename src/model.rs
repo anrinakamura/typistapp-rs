@@ -44,6 +44,36 @@ impl Model {
         let average_luminance = total_luminance / (width * height) as f32;
         Ok(average_luminance)
     }
+
+    pub fn correlation(x_values: &[f64], y_values: &[f64]) -> Option<f64> {
+        if x_values.len() != y_values.len() || x_values.is_empty() || y_values.is_empty() {
+            return None;
+        }
+
+        let n = x_values.len();
+        let mean_x = x_values.iter().sum::<f64>() / n as f64;
+        let mean_y = y_values.iter().sum::<f64>() / n as f64;
+        let (numerator, denom_x, denom_y) =
+            x_values
+                .iter()
+                .zip(y_values)
+                .fold((0.0, 0.0, 0.0), |(num, den_x, den_y), (&x, &y)| {
+                    let diff_x = x - mean_x;
+                    let diff_y = y - mean_y;
+                    (
+                        num + diff_x * diff_y,
+                        den_x + diff_x.powi(2),
+                        den_y + diff_y.powi(2),
+                    )
+                });
+
+        let denominator = denom_x.sqrt() * denom_y.sqrt();
+        if denominator == 0.0 {
+            return None;
+        }
+
+        Some(numerator / denominator)
+    }
 }
 
 #[cfg(test)]
@@ -69,5 +99,29 @@ mod tests {
         assert!(result.is_ok());
         let luminance = result.unwrap();
         assert!(luminance >= 0.0 && luminance <= 1.0);
+    }
+
+    #[test]
+    fn correlation_different_lengths_returns_none() {
+        assert_eq!(Model::correlation(&[1.0], &[1.0, 2.0]), None);
+    }
+
+    #[test]
+    fn correlation_empty_slices_returns_none() {
+        assert_eq!(Model::correlation(&[], &[]), None);
+    }
+
+    #[test]
+    fn correlation_valid_data_returns_none() {
+        assert_eq!(Model::correlation(&[1.0, 2.0], &[5.0, 5.0]), None,);
+    }
+
+    #[test]
+    fn correlation_valid_data_returns_some() {
+        let x_values = [1.0, 2.0, 3.0];
+        let y_values = [4.0, 5.0, 6.0];
+        let result = Model::correlation(&x_values, &y_values);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 1.0).abs() < 1e-9);
     }
 }

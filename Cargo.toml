@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 ab_glyph = "0.2.29"
 anyhow = "1.0.98"
-thiserror = "2.0.12"
+image = "0.25.6"
