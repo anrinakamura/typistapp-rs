@@ -18,7 +18,7 @@ impl Color {
     /// let luminance = Color::luminance_from_rgb_components(&rgb);
     /// assert_eq!(luminance, 0.5);
     /// ```
-    fn luminance_from_rgb_components(rgb: &[f64; 3]) -> f64 {
+    pub fn luminance_from_rgb_components(rgb: &[f64; 3]) -> f64 {
         let r = rgb[0].clamp(0.0, 1.0);
         let g = rgb[1].clamp(0.0, 1.0);
         let b = rgb[2].clamp(0.0, 1.0);
