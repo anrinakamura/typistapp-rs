@@ -1,6 +1,8 @@
-struct Color {}
+#[allow(dead_code)]
+pub struct Color {}
 
 impl Color {
+    #[allow(dead_code)]
     /// Converts RGB components to a luminance value.
     /// The RGB components should be in the range [0.0, 1.0].
     /// Returns the luminance as a floating-point value.
