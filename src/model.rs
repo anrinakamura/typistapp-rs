@@ -76,6 +76,24 @@ impl Model {
 
         Some(numerator / denominator)
     }
+
+    fn normalized(values: &[f64], min: f64, max: f64) -> Option<Vec<f64>> {
+        if min >= max {
+            return None;
+        }
+
+        let range = max - min;
+        let result: Vec<f64> = if range.abs() < F64_ALMOST_ZERO {
+            vec![0.0; values.len()]
+        } else {
+            values
+                .iter()
+                .map(|&v| (v - min) / range)
+                .collect::<Vec<_>>()
+        };
+
+        Some(result)
+    }
 }
 
 #[cfg(test)]
@@ -125,5 +143,26 @@ mod tests {
         let result = Model::correlation(&x_values, &y_values);
         assert!(result.is_some());
         assert!((result.unwrap() - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn normalized_invalid_range_returns_none() {
+        assert_eq!(Model::normalized(&[1.0, 2.0, 3.0], 3.0, 1.0), None);
+    }
+
+    #[test]
+    fn normalized_empty_values_returns_some() {
+        assert_eq!(Model::normalized(&vec![], 0.0, 1.0), Some(vec![]));
+    }
+
+    #[test]
+    fn normalized_valid_range_returns_some() {
+        let values = [1.0, 2.0, 3.0];
+        let min = 1.0;
+        let max = 3.0;
+        let expected = vec![0.0, 0.5, 1.0];
+        let result = Model::normalized(&values, min, max);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), expected);
     }
 }
