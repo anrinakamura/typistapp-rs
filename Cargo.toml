@@ -6,3 +6,7 @@ edition = "2024"
 [dependencies]
 ab_glyph = "0.2.29"
 anyhow = "1.0.98"
+env_logger = "0.11.8"
+image = "0.25.6"
+log = "0.4.27"
+rayon = "1.10.0"

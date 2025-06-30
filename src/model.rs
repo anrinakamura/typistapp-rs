@@ -1,7 +1,38 @@
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
+use image::DynamicImage;
+use log;
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
+const NUM_OF_CANDIDATES: usize = 16;
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+struct Element {
+    characteristics: Vec<f64>,
+    luminance: f32,
+    character: Option<char>,
+    image: Option<DynamicImage>,
+}
+
+#[allow(dead_code)]
+impl Element {
+    pub fn characteristics(&self) -> &[f64] {
+        &self.characteristics
+    }
+
+    pub fn luminance(&self) -> f32 {
+        self.luminance
+    }
+
+    pub fn character(&self) -> Option<char> {
+        self.character
+    }
+
+    pub fn image(&self) -> Option<&DynamicImage> {
+        self.image.as_ref()
+    }
+}
 
 #[allow(dead_code)]
 pub struct Model {
@@ -55,28 +86,36 @@ impl Model {
         let n = x_values.len();
         let mean_x = x_values.iter().sum::<f64>() / n as f64;
         let mean_y = y_values.iter().sum::<f64>() / n as f64;
-        let (numerator, denom_x, denom_y) =
-            x_values
-                .iter()
-                .zip(y_values)
-                .fold((0.0, 0.0, 0.0), |(num, den_x, den_y), (&x, &y)| {
-                    let diff_x = x - mean_x;
-                    let diff_y = y - mean_y;
-                    (
-                        num + diff_x * diff_y,
-                        den_x + diff_x.powi(2),
-                        den_y + diff_y.powi(2),
-                    )
-                });
 
-        let denominator = denom_x.sqrt() * denom_y.sqrt();
-        if denominator.abs() < F64_ALMOST_ZERO {
-            return None;
+        let mut numerator = 0.0;
+        let mut den_x = 0.0;
+        let mut den_y = 0.0;
+
+        for (x, y) in x_values.iter().zip(y_values.iter()) {
+            let diff_x = x - mean_x;
+            let diff_y = y - mean_y;
+            numerator += diff_x * diff_y;
+            den_x += diff_x * diff_x;
+            den_y += diff_y * diff_y;
         }
 
+        let denominator = den_x.sqrt() * den_y.sqrt();
+        if denominator.abs() < F64_ALMOST_ZERO {
+            let is_den_x_zero = den_x.abs() < F64_ALMOST_ZERO;
+            let is_den_y_zero = den_y.abs() < F64_ALMOST_ZERO;
+            let are_means_equal = (mean_x - mean_y).abs() < F64_ALMOST_ZERO;
+
+            return match (is_den_x_zero, is_den_y_zero, are_means_equal) {
+                (true, true, true) => Some(1.0),
+                _ => Some(0.0),
+            };
+        }
+
+        log::debug!("numerator: {}, denominator: {}", numerator, denominator);
         Some(numerator / denominator)
     }
 
+    #[allow(dead_code)]
     fn normalized(values: &[f64], min: f64, max: f64) -> Option<Vec<f64>> {
         if min >= max {
             return None;
@@ -93,6 +132,73 @@ impl Model {
         };
 
         Some(result)
+    }
+
+    fn closest_luminance_index(target: f32, typeset_elements: &[Element]) -> usize {
+        let result = typeset_elements.binary_search_by(|prove| {
+            prove
+                .luminance()
+                .partial_cmp(&target)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        match result {
+            Ok(i) => i,
+            Err(i) => {
+                if i == 0 {
+                    0
+                } else if i >= typeset_elements.len() {
+                    typeset_elements.len() - 1
+                } else {
+                    let diff1 = (typeset_elements[i - 1].luminance() - target).abs();
+                    let diff2 = (typeset_elements[i].luminance() - target).abs();
+                    if diff1 < diff2 { i - 1 } else { i }
+                }
+            }
+        }
+    }
+
+    fn best_match_element<'a>(target: &Element, candidates: &'a [Element]) -> Option<&'a Element> {
+        let mut max = -1.0;
+        let mut best: Option<&Element> = None;
+        for candidate in candidates {
+            if let Some(result) =
+                Self::correlation(target.characteristics(), candidate.characteristics())
+            {
+                if result > max {
+                    max = result;
+                    best = Some(candidate);
+                }
+            }
+        }
+
+        best
+    }
+
+    #[allow(dead_code)]
+    fn search_typeset_element<'a>(
+        picture_element: &'a Element,
+        typeset_elements: &'a [Element],
+    ) -> Option<&'a Element> {
+        if typeset_elements.is_empty() {
+            return None;
+        }
+
+        // STEP 1: find the index of the character with the most similar average luminance.
+        let index = Self::closest_luminance_index(picture_element.luminance(), typeset_elements);
+
+        // STEP 2: create a slice of candidates around that index for a more detailed search.
+        // NOTE: use saturating_sub to avoid underflow when index is less than NUM_OF_CANDIDATES / 2.
+        let from = index.saturating_sub(NUM_OF_CANDIDATES / 2);
+        let to = std::cmp::min(typeset_elements.len(), from + NUM_OF_CANDIDATES);
+        let candidates = &typeset_elements[from..to];
+
+        if candidates.is_empty() {
+            return Some(&typeset_elements[index]);
+        }
+
+        // STEP 3: from the candidates, find the best match using pixel-by-pixel correlation.
+        Self::best_match_element(picture_element, candidates)
     }
 }
 
@@ -132,11 +238,6 @@ mod tests {
     }
 
     #[test]
-    fn correlation_valid_data_returns_none() {
-        assert_eq!(Model::correlation(&[1.0, 2.0], &[5.0, 5.0]), None,);
-    }
-
-    #[test]
     fn correlation_valid_data_returns_some() {
         let x_values = [1.0, 2.0, 3.0];
         let y_values = [4.0, 5.0, 6.0];
@@ -164,5 +265,143 @@ mod tests {
         let result = Model::normalized(&values, min, max);
         assert!(result.is_some());
         assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn closest_luminance_index_empty_elements() {
+        let elements: Vec<Element> = vec![];
+        assert_eq!(Model::closest_luminance_index(0.5, &elements), 0);
+    }
+
+    #[test]
+    fn closest_luminance_index_single_element() {
+        let elements = vec![Element {
+            characteristics: vec![0.0; 10],
+            luminance: 0.5,
+            character: Some('A'),
+            image: None,
+        }];
+        assert_eq!(Model::closest_luminance_index(0.5, &elements), 0);
+    }
+
+    #[test]
+    fn closest_luminance_index_multiple_elements() {
+        let elements = vec![
+            Element {
+                characteristics: vec![0.0; 10],
+                luminance: 0.1,
+                character: None,
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.0; 10],
+                luminance: 0.5,
+                character: None,
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.0; 10],
+                luminance: 0.9,
+                character: None,
+                image: None,
+            },
+        ];
+        assert_eq!(Model::closest_luminance_index(0.5, &elements), 1);
+        assert_eq!(Model::closest_luminance_index(0.2, &elements), 0);
+        assert_eq!(Model::closest_luminance_index(0.8, &elements), 2);
+    }
+
+    #[test]
+    fn best_match_element_empty_candidates() {
+        let target = Element {
+            characteristics: vec![0.5; 10],
+            luminance: 0.5,
+            character: Some('A'),
+            image: None,
+        };
+        let candidates: Vec<Element> = vec![];
+        assert!(Model::best_match_element(&target, &candidates).is_none());
+    }
+
+    #[test]
+    fn best_match_element_valid_candidates() {
+        let target = Element {
+            characteristics: vec![0.5; 10],
+            luminance: 0.5,
+            character: Some('A'),
+            image: None,
+        };
+        let candidates = vec![
+            Element {
+                characteristics: vec![0.2; 10],
+                luminance: 0.2,
+                character: Some('B'),
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.5; 10],
+                luminance: 0.5,
+                character: Some('C'),
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.7; 10],
+                luminance: 0.7,
+                character: Some('D'),
+                image: None,
+            },
+        ];
+        let best = Model::best_match_element(&target, &candidates);
+        assert!(best.is_some());
+        assert_eq!(best.unwrap().characteristics(), &vec![0.5; 10]);
+    }
+
+    #[test]
+    fn search_typeset_element_empty_typeset_returns_none() {
+        let picture_element = Element {
+            characteristics: vec![0.0; 10],
+            luminance: 0.5,
+            character: Some('A'),
+            image: None,
+        };
+        let typeset_elements: Vec<Element> = vec![];
+        assert!(
+            Model::search_typeset_element(&picture_element, &typeset_elements).is_none()
+        );
+    }
+
+    #[test]
+    fn search_typeset_element_valid_typeset_returns_some() {
+        let picture_element = Element {
+            characteristics: vec![0.5; 10],
+            luminance: 0.5,
+            character: Some('A'),
+            image: None,
+        };
+        let typeset_elements = vec![
+            Element {
+                characteristics: vec![0.2; 10],
+                luminance: 0.2, 
+                character: Some('B'),
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.5; 10],
+                luminance: 0.5,
+                character: Some('C'),
+                image: None,
+            },
+            Element {
+                characteristics: vec![0.7; 10], 
+                luminance: 0.7,
+                character: Some('D'),
+                image: None,
+            },
+        ];
+        let result = Model::search_typeset_element(&picture_element, &typeset_elements);
+        assert!(result.is_some());
+        let best_match = result.unwrap();
+        assert_eq!(best_match.characteristics(), &vec![0.5; 10]);
+        assert_eq!(best_match.character(), Some('C'));
     }
 }
