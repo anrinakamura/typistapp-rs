@@ -2,12 +2,13 @@ use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
 use image::DynamicImage;
 use log;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 struct Element {
     characteristics: Vec<f64>,
     luminance: f32,
@@ -199,6 +200,18 @@ impl Model {
 
         // STEP 3: from the candidates, find the best match using pixel-by-pixel correlation.
         Self::best_match_element(picture_element, candidates)
+    }
+
+    #[allow(dead_code)]
+    fn convert(picture_elements: &[Element], typeset_elements: &[Element]) -> Vec<Element> {
+        let default = Element::default();
+        let typist_art_elements: Vec<Element> = picture_elements
+            .par_iter()
+            .map(|e| Self::search_typeset_element(e, typeset_elements).unwrap_or(&default))
+            .cloned()
+            .collect();
+
+        typist_art_elements
     }
 }
 
