@@ -2,6 +2,7 @@ use anyhow::Result;
 use typistapp::model::Model;
 
 fn main() {
+    env_logger::init();
     println!("Hello, world!");
 }
 
