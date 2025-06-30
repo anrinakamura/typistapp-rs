@@ -365,9 +365,7 @@ mod tests {
             image: None,
         };
         let typeset_elements: Vec<Element> = vec![];
-        assert!(
-            Model::search_typeset_element(&picture_element, &typeset_elements).is_none()
-        );
+        assert!(Model::search_typeset_element(&picture_element, &typeset_elements).is_none());
     }
 
     #[test]
@@ -381,7 +379,7 @@ mod tests {
         let typeset_elements = vec![
             Element {
                 characteristics: vec![0.2; 10],
-                luminance: 0.2, 
+                luminance: 0.2,
                 character: Some('B'),
                 image: None,
             },
@@ -392,7 +390,7 @@ mod tests {
                 image: None,
             },
             Element {
-                characteristics: vec![0.7; 10], 
+                characteristics: vec![0.7; 10],
                 luminance: 0.7,
                 character: Some('D'),
                 image: None,
