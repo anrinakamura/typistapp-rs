@@ -181,17 +181,17 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn run(&mut self, characters: &[char], image: &DynamicImage) -> Result<()> {
-        let columns = 32;
-        let nwidth = IMAGE_SIZE * columns;
-        let nehight = image.height() * nwidth / image.width();
-        let img = image.resize(nwidth, nehight, imageops::FilterType::Triangle);
+    pub fn run(&mut self, length: u32, characters: &[char], image: &DynamicImage) -> Result<()> {
+        let columns = length;
+        let width = IMAGE_SIZE * columns;
+        let hight = image.height() * width / image.width();
+        let img = image.resize(width, hight, imageops::FilterType::Triangle);
 
-        let rows = nehight / IMAGE_SIZE;
+        let rows = hight / IMAGE_SIZE;
         log::info!(
             "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
-            nwidth,  // image.width(),
-            nehight, // image.height(),
+            width,
+            hight,
             IMAGE_SIZE,
             columns,
             rows

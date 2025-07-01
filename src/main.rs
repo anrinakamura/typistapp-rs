@@ -26,6 +26,6 @@ fn run() -> Result<()> {
     let mut m = Model::from_vec(font_data)?;
     log::debug!("Model created: {:?}", m);
 
-    m.run(&chars, &image)?;
+    m.run(32, &chars, &image)?;
     Ok(())
 }
