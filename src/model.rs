@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
-use image::{DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, imageops};
 use log;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 
@@ -10,6 +10,9 @@ use crate::color::Color;
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
+const IMAGE_FONT_SIZE: u32 = 18;
+const IMAGE_MARGIN: u32 = 1;
+const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
 
 static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
 
@@ -41,13 +44,16 @@ impl Element {
     }
 
     pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
+        let (width, height) = (IMAGE_SIZE, IMAGE_SIZE);
+        let mut characteristics = vec![0.0; (width * height) as usize];
+
         let glyph = font.glyph_id(character).with_scale(scale);
-        let outlined_glyph = match font.outline_glyph(glyph) {
+        let outline = match font.outline_glyph(glyph) {
             Some(g) => g,
             None => {
                 if character == '　' {
                     return Ok(Element {
-                        characteristics: vec![0.0; (scale.x * scale.y) as usize],
+                        characteristics,
                         luminance: 0.0,
                         character: Some('　'),
                         image: None,
@@ -60,27 +66,35 @@ impl Element {
             }
         };
 
-        let bounds = outlined_glyph.px_bounds();
-        let (width, height) = (bounds.width().ceil() as u32, bounds.height().ceil() as u32);
+        let bounds = outline.px_bounds();
 
-        if width == 0 || height == 0 {
-            return Err(anyhow!(
-                "Glyph for character '{}' has zero width or height.",
-                character
-            ));
-        }
+        // canvas center - glyph center
+        let glyph_center_x = bounds.min.x + bounds.width() / 2.0;
+        let glyph_center_y = bounds.min.y + bounds.height() / 2.0;
 
-        let mut characteristics: Vec<f64> = vec![];
-        let mut total_luminance: f64 = 0.0;
+        let canvas_center_x = width as f32 / 2.0;
+        let canvas_center_y = height as f32 / 2.0;
 
-        outlined_glyph.draw(|_, _, c| {
-            total_luminance += c as f64;
-            characteristics.push(c as f64);
+        let offset_x = canvas_center_x - glyph_center_x;
+        let offset_y = canvas_center_y - glyph_center_y;
+
+        outline.draw(|x, y, c| {
+            let canvas_x = x as f32 + offset_x;
+            let canvas_y = y as f32 + offset_y;
+
+            if canvas_x >= 0.0
+                && canvas_x < width as f32
+                && canvas_y >= 0.0
+                && canvas_y < height as f32
+            {
+                let index = (canvas_y as u32 * width + canvas_x as u32) as usize;
+                characteristics[index] = c as f64;
+            }
         });
 
-        let luminance = total_luminance / (width * height) as f64;
+        let luminance = characteristics.iter().sum::<f64>() / (width * height) as f64;
 
-        log::info!(
+        log::debug!(
             "Character: '{}', Width: {}, Height: {}, Luminance: {}",
             character,
             width,
@@ -98,11 +112,7 @@ impl Element {
 
     pub fn from_image(image: DynamicImage) -> Result<Self> {
         let (width, height) = image.dimensions();
-        log::trace!(
-            "Image dimensions: {}x{}",
-            width,
-            height
-        );
+        log::trace!("Image dimensions: {}x{}", width, height);
         if width == 0 || height == 0 {
             return Err(anyhow!("Image has zero width or height."));
         }
@@ -172,43 +182,42 @@ pub struct Model {
 
 impl Model {
     pub fn run(&mut self, characters: &[char], image: &DynamicImage) -> Result<()> {
-        let size = 16;
-        let columns = image.width() / size;
-        let rows = image.height() / size;
-        log::debug!(
+        let columns = 32;
+        let nwidth = IMAGE_SIZE * columns;
+        let nehight = image.height() * nwidth / image.width();
+        let img = image.resize(nwidth, nehight, imageops::FilterType::Triangle);
+
+        let rows = nehight / IMAGE_SIZE;
+        log::info!(
             "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
-            image.width(),
-            image.height(),
-            size,
+            nwidth,  // image.width(),
+            nehight, // image.height(),
+            IMAGE_SIZE,
             columns,
             rows
         );
 
-        // let mut typeset_elements = self.typeset_elements(characters)?;
-        let mut picture_elements = self.picture_elements(image, size, columns, rows)?;
-        // log::debug!(
-        //     "Typeset elements: {}, Picture elements: {}",
-        //     typeset_elements.len(),
-        //     picture_elements.len()
-        // );
-        log::debug!(
-            "Picture elements: {}",
+        let mut typeset_elements = self.typeset_elements(characters)?;
+        let mut picture_elements = self.picture_elements(&img, IMAGE_SIZE, columns, rows)?;
+        log::info!(
+            "Typeset elements: {}, Picture elements: {}",
+            typeset_elements.len(),
             picture_elements.len()
         );
 
         // normalize the characteristics of typeset and picture elements.
-        // let mut typeset_min = f64::INFINITY;
-        // let mut typeset_max = f64::NEG_INFINITY;
+        let mut typeset_min = f64::INFINITY;
+        let mut typeset_max = f64::NEG_INFINITY;
         let mut picture_min = f64::INFINITY;
         let mut picture_max = f64::NEG_INFINITY;
-        // for e in &typeset_elements {
-        //     if e.luminance() < typeset_min {
-        //         typeset_min = e.luminance();
-        //     }
-        //     if e.luminance() > typeset_max {
-        //         typeset_max = e.luminance();
-        //     }
-        // }
+        for e in &typeset_elements {
+            if e.luminance() < typeset_min {
+                typeset_min = e.luminance();
+            }
+            if e.luminance() > typeset_max {
+                typeset_max = e.luminance();
+            }
+        }
         for e in &picture_elements {
             if e.luminance() < picture_min {
                 picture_min = e.luminance();
@@ -217,26 +226,21 @@ impl Model {
                 picture_max = e.luminance();
             }
         }
-        // log::debug!(
-        //     "Typeset luminance range: [{}, {}], Picture luminance range: [{}, {}]",
-        //     typeset_min,
-        //     typeset_max,
-        //     picture_min,
-        //     picture_max
-        // );
-        log::debug!(
-            "Picture luminance range: [{}, {}]",
+        log::info!(
+            "Typeset luminance range: [{}, {}], Picture luminance range: [{}, {}]",
+            typeset_min,
+            typeset_max,
             picture_min,
             picture_max
         );
 
-        // typeset_elements
-        //     .par_iter_mut()
-        //     .for_each(|e| e.normalized(typeset_min, typeset_max).unwrap());
+        typeset_elements
+            .par_iter_mut()
+            .for_each(|e| e.normalized(typeset_min, typeset_max).unwrap());
         picture_elements
             .par_iter_mut()
             .for_each(|e| e.normalized(picture_min, picture_max).unwrap());
-        log::debug!("Normalized typeset and picture elements.");
+        log::info!("Normalized typeset and picture elements.");
 
         Ok(())
     }

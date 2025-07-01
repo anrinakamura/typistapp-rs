@@ -18,7 +18,7 @@ fn run() -> Result<()> {
     }
     log::debug!("chars: {:?}", chars);
 
-    let path = "resources/monalisa.jpg"; 
+    let path = "resources/monalisa.jpg";
     let image = image::open(path)?;
     log::debug!("Image loaded: {}", path);
 
