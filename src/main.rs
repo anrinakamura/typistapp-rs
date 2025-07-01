@@ -9,7 +9,6 @@ fn main() -> Result<()> {
     run()
 }
 
-#[allow(dead_code)]
 fn run() -> Result<()> {
     let reader = BufReader::new(std::fs::File::open("resources/typeset.txt")?);
     let mut chars = vec![];
@@ -27,5 +26,6 @@ fn run() -> Result<()> {
     log::debug!("Model created: {:?}", m);
 
     m.run(32, &chars, &image)?;
+
     Ok(())
 }

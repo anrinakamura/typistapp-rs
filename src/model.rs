@@ -6,7 +6,7 @@ use image::{DynamicImage, GenericImageView, imageops};
 use log;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::color::Color;
+use crate::{color::Color, view::View};
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
@@ -252,23 +252,30 @@ impl Model {
         let typist_art_elements = Self::convert(&picture_elements, &typeset_elements);
         log::info!("Converted picture elements to typist art.");
 
-        let mut v = vec![];
-        for y in 0..rows {
-            for x in 0..columns {
-                if x == 0 {
-                    v.push('\n');
-                }
-                v.push(
-                    typist_art_elements
-                        .get((y * columns + x) as usize)
-                        .unwrap_or(&Element::default())
-                        .character()
-                        .unwrap_or(FULL_WIDTH_SPACE),
-                );
-            }
-        }
-        let s: String = v.iter().collect();
-        log::info!("{s}");
+        // let mut v = vec![];
+        // for y in 0..rows {
+        //     for x in 0..columns {
+        //         if x == 0 {
+        //             v.push('\n');
+        //         }
+        //         v.push(
+        //             typist_art_elements
+        //                 .get((y * columns + x) as usize)
+        //                 .unwrap_or(&Element::default())
+        //                 .character()
+        //                 .unwrap_or(FULL_WIDTH_SPACE),
+        //         );
+        //     }
+        // }
+        // let s: String = v.iter().collect();
+        // log::info!("{s}");
+
+        let data: Vec<char> = typist_art_elements
+            .iter()
+            .map(|e| e.character().unwrap_or(FULL_WIDTH_SPACE))
+            .collect();
+        View::animate(&data, columns, rows)?;
+        log::info!("Animation completed successfully!");
 
         Ok(())
     }
