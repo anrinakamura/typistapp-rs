@@ -242,6 +242,35 @@ impl Model {
             .for_each(|e| e.normalized(picture_min, picture_max).unwrap());
         log::info!("Normalized typeset and picture elements.");
 
+        // sort the typeset elements by luminance.
+        typeset_elements.sort_by(|a, b| {
+            a.luminance()
+                .partial_cmp(&b.luminance())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        log::info!("Sorted typeset elements by luminance.");
+
+        let typist_art_elements = Self::convert(&picture_elements, &typeset_elements);
+        log::info!("Converted picture elements to typist art.");
+
+        let mut v = vec![];
+        for y in 0..rows {
+            for x in 0..columns {
+                if x == 0 {
+                    v.push('\n');
+                }
+                v.push(
+                    typist_art_elements
+                        .get((y * columns + x) as usize)
+                        .unwrap_or(&Element::default())
+                        .character()
+                        .unwrap_or(char::default()),
+                );
+            }
+        }
+        let s: String = v.iter().collect();
+        log::info!("{s}");
+
         Ok(())
     }
 
@@ -254,7 +283,6 @@ impl Model {
         Self::from_vec(font.to_vec())
     }
 
-    #[allow(dead_code)]
     fn picture_elements(
         &self,
         image: &DynamicImage,
@@ -273,7 +301,6 @@ impl Model {
         Ok(elements)
     }
 
-    #[allow(dead_code)]
     fn typeset_elements(&self, characters: &[char]) -> Result<Vec<Element>> {
         let elements: Vec<Element> = characters
             .par_iter()
