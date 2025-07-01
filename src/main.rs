@@ -7,6 +7,7 @@ use typistapp::model::Model;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
+    #[arg(value_parser = clap::value_parser!(u32).range(32..=128))]
     length: u32,
 
     #[arg(short, long, default_value = "resources/monalisa.jpg")]
@@ -24,11 +25,6 @@ fn main() -> Result<()> {
 }
 
 fn run(args: &Args) -> Result<()> {
-    if args.length < 32 || 128 < args.length {
-        log::error!("Length should be between 32 and 128. Please try again.");
-        return Err(anyhow::anyhow!("Invalid length"));
-    }
-
     let reader = BufReader::new(std::fs::File::open("resources/typeset.txt")?);
     let mut chars = vec![];
     for line in reader.lines() {
