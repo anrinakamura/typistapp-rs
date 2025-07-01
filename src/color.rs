@@ -1,8 +1,6 @@
-#[allow(dead_code)]
 pub struct Color {}
 
 impl Color {
-    #[allow(dead_code)]
     /// Converts RGB components to a luminance value.
     /// The RGB components should be in the range [0.0, 1.0].
     /// Returns the luminance as a floating-point value.
@@ -22,6 +20,18 @@ impl Color {
         let g = rgb[1].clamp(0.0, 1.0);
         let b = rgb[2].clamp(0.0, 1.0);
 
+        Self::luminance(r, g, b)
+    }
+
+    pub fn luminance_from_rgba(rgba: &[u8; 4]) -> f64 {
+        let r = rgba[0] as f64 / 255.0;
+        let g = rgba[1] as f64 / 255.0;
+        let b = rgba[2] as f64 / 255.0;
+
+        Self::luminance(r, g, b)
+    }
+
+    fn luminance(r: f64, g: f64, b: f64) -> f64 {
         // Using the formula for relative luminance
         (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
     }

@@ -2,9 +2,11 @@ use std::sync::LazyLock;
 
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use log;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+use crate::color::Color;
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
@@ -15,7 +17,7 @@ static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
 #[derive(Debug, Clone, Default, PartialEq)]
 struct Element {
     characteristics: Vec<f64>,
-    luminance: f32,
+    luminance: f64,
     character: Option<char>,
     image: Option<DynamicImage>,
 }
@@ -26,7 +28,7 @@ impl Element {
         &self.characteristics
     }
 
-    pub fn luminance(&self) -> f32 {
+    pub fn luminance(&self) -> f64 {
         self.luminance
     }
 
@@ -61,19 +63,45 @@ impl Element {
         }
 
         let mut characteristics: Vec<f64> = vec![];
-        let mut total_luminance = 0.0;
+        let mut total_luminance: f64 = 0.0;
+
         outlined_glyph.draw(|_, _, c| {
-            total_luminance += c;
+            total_luminance += c as f64;
             characteristics.push(c as f64);
         });
 
-        let luminance = total_luminance / (width * height) as f32;
+        let luminance = total_luminance / (width * height) as f64;
 
         Ok(Element {
             characteristics,
             luminance,
             character: Some(character),
             image: None,
+        })
+    }
+
+    pub fn from_image(image: DynamicImage) -> Result<Self> {
+        let (width, height) = image.dimensions();
+        if width == 0 || height == 0 {
+            return Err(anyhow!("Image has zero width or height."));
+        }
+
+        let mut characteristics: Vec<f64> = vec![];
+        let mut total_luminance: f64 = 0.0;
+
+        for (_, _, rgba) in image.pixels() {
+            let l = Color::luminance_from_rgba(&rgba.0);
+            total_luminance += l;
+            characteristics.push(l);
+        }
+
+        let luminance = total_luminance / (width * height) as f64;
+
+        Ok(Element {
+            characteristics,
+            luminance,
+            character: None,
+            image: Some(image),
         })
     }
 }
@@ -84,13 +112,32 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn from_vec(data: Vec<u8>) -> Result<Self> {
-        let font = FontArc::try_from_vec(data)?;
+    pub fn from_vec(font: Vec<u8>) -> Result<Self> {
+        let font = FontArc::try_from_vec(font)?;
         Ok(Model { font })
     }
 
-    pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        Self::from_vec(data.to_vec())
+    pub fn from_bytes(font: &[u8]) -> Result<Self> {
+        Self::from_vec(font.to_vec())
+    }
+
+    #[allow(dead_code)]
+    fn picture_elements(
+        &self,
+        image: &DynamicImage,
+        size: u32,
+        columns: u32,
+        rows: u32,
+    ) -> Result<Vec<Element>> {
+        let mut elements = vec![];
+        for y in 0..rows {
+            for x in 0..columns {
+                let block_image = image.crop_imm(x * size, y * size, size, size);
+                elements.push(Element::from_image(block_image)?);
+            }
+        }
+
+        Ok(elements)
     }
 
     #[allow(dead_code)]
@@ -188,7 +235,7 @@ impl Model {
         Some(result)
     }
 
-    fn closest_luminance_index(target: f32, typeset_elements: &[Element]) -> usize {
+    fn closest_luminance_index(target: f64, typeset_elements: &[Element]) -> usize {
         let result = typeset_elements.binary_search_by(|prove| {
             prove
                 .luminance()
