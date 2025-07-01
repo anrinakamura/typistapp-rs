@@ -36,10 +36,6 @@ impl View {
             cursor::Hide
         )?;
 
-        // // get terminal width.
-        // let (terminal_width, _) = terminal::size()?;
-        // let m = (terminal_width / 2) as usize;
-
         let mut data_cycle = data.iter().cycle();
 
         'outer: for y in 0..rows {
