@@ -16,7 +16,6 @@ const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
 
 static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, PartialEq)]
 struct Element {
     characteristics: Vec<f64>,
@@ -25,7 +24,6 @@ struct Element {
     image: Option<DynamicImage>,
 }
 
-#[allow(dead_code)]
 impl Element {
     pub fn characteristics(&self) -> &[f64] {
         &self.characteristics
@@ -39,6 +37,7 @@ impl Element {
         self.character
     }
 
+    #[allow(dead_code)]
     pub fn image(&self) -> Option<&DynamicImage> {
         self.image.as_ref()
     }
@@ -167,14 +166,13 @@ impl Element {
 
     fn normalize(value: f64, min: f64, max: f64) -> f64 {
         if max - min < F64_ALMOST_ZERO {
-            return 0.0;
+            0.0
         } else {
             (value - min) / (max - min)
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Model {
     font: FontArc,
@@ -462,7 +460,6 @@ impl Model {
         Self::best_match_element(picture_element, candidates)
     }
 
-    #[allow(dead_code)]
     fn convert(picture_elements: &[Element], typeset_elements: &[Element]) -> Vec<Element> {
         let default = Element::default();
         let typist_art_elements: Vec<Element> = picture_elements
