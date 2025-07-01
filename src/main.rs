@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 
 use anyhow::Result;
-use typistapp::model::Model;
+use typistapp::{model::Model, view::View};
 
 fn main() -> Result<()> {
     env_logger::init();
@@ -9,7 +9,6 @@ fn main() -> Result<()> {
     run()
 }
 
-#[allow(dead_code)]
 fn run() -> Result<()> {
     let reader = BufReader::new(std::fs::File::open("resources/typeset.txt")?);
     let mut chars = vec![];
@@ -27,5 +26,8 @@ fn run() -> Result<()> {
     log::debug!("Model created: {:?}", m);
 
     m.run(32, &chars, &image)?;
+
+    View::run();
+
     Ok(())
 }
