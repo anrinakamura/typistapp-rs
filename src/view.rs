@@ -6,6 +6,8 @@ use std::{
 
 use crossterm::{cursor, execute, style::Print, terminal};
 
+const PER_CHARACTER_DELAY_MS: u64 = 10;
+
 pub struct View {}
 
 impl View {
@@ -44,7 +46,7 @@ impl View {
                     execute!(stdout, cursor::MoveTo((x * 2) as u16, y as u16), Print(s))?;
 
                     stdout.flush()?;
-                    thread::sleep(Duration::from_millis(10));
+                    thread::sleep(Duration::from_millis(PER_CHARACTER_DELAY_MS));
                 } else {
                     break 'outer;
                 }
