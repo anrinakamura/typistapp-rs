@@ -4,7 +4,7 @@ use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
 use image::{DynamicImage, GenericImageView};
 use log;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::color::Color;
 
@@ -45,6 +45,14 @@ impl Element {
         let outlined_glyph = match font.outline_glyph(glyph) {
             Some(g) => g,
             None => {
+                if character == '　' {
+                    return Ok(Element {
+                        characteristics: vec![0.0; (scale.x * scale.y) as usize],
+                        luminance: 0.0,
+                        character: Some('　'),
+                        image: None,
+                    });
+                }
                 return Err(anyhow!(
                     "Failed to outline glyph for character: {}",
                     character
@@ -72,6 +80,14 @@ impl Element {
 
         let luminance = total_luminance / (width * height) as f64;
 
+        log::info!(
+            "Character: '{}', Width: {}, Height: {}, Luminance: {}",
+            character,
+            width,
+            height,
+            luminance
+        );
+
         Ok(Element {
             characteristics,
             luminance,
@@ -82,6 +98,11 @@ impl Element {
 
     pub fn from_image(image: DynamicImage) -> Result<Self> {
         let (width, height) = image.dimensions();
+        log::trace!(
+            "Image dimensions: {}x{}",
+            width,
+            height
+        );
         if width == 0 || height == 0 {
             return Err(anyhow!("Image has zero width or height."));
         }
@@ -104,14 +125,122 @@ impl Element {
             image: Some(image),
         })
     }
+
+    pub fn normalized(&mut self, min: f64, max: f64) -> Result<()> {
+        if min >= max {
+            return Err(anyhow!(
+                "Invalid range: min ({}) must be less than max ({})",
+                min,
+                max
+            ));
+        }
+
+        log::trace!(
+            "Normalizing element: character: {:?}, luminance: {}",
+            self.character,
+            self.luminance,
+        );
+
+        for value in &mut self.characteristics {
+            *value = Self::normalize(*value, min, max);
+        }
+        self.luminance = Self::normalize(self.luminance, min, max);
+
+        log::trace!(
+            "Normalized element: character: {:?}, luminance: {}",
+            self.character,
+            self.luminance,
+        );
+
+        Ok(())
+    }
+
+    fn normalize(value: f64, min: f64, max: f64) -> f64 {
+        if max - min < F64_ALMOST_ZERO {
+            return 0.0;
+        } else {
+            (value - min) / (max - min)
+        }
+    }
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct Model {
     font: FontArc,
 }
 
 impl Model {
+    pub fn run(&mut self, characters: &[char], image: &DynamicImage) -> Result<()> {
+        let size = 16;
+        let columns = image.width() / size;
+        let rows = image.height() / size;
+        log::debug!(
+            "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
+            image.width(),
+            image.height(),
+            size,
+            columns,
+            rows
+        );
+
+        // let mut typeset_elements = self.typeset_elements(characters)?;
+        let mut picture_elements = self.picture_elements(image, size, columns, rows)?;
+        // log::debug!(
+        //     "Typeset elements: {}, Picture elements: {}",
+        //     typeset_elements.len(),
+        //     picture_elements.len()
+        // );
+        log::debug!(
+            "Picture elements: {}",
+            picture_elements.len()
+        );
+
+        // normalize the characteristics of typeset and picture elements.
+        // let mut typeset_min = f64::INFINITY;
+        // let mut typeset_max = f64::NEG_INFINITY;
+        let mut picture_min = f64::INFINITY;
+        let mut picture_max = f64::NEG_INFINITY;
+        // for e in &typeset_elements {
+        //     if e.luminance() < typeset_min {
+        //         typeset_min = e.luminance();
+        //     }
+        //     if e.luminance() > typeset_max {
+        //         typeset_max = e.luminance();
+        //     }
+        // }
+        for e in &picture_elements {
+            if e.luminance() < picture_min {
+                picture_min = e.luminance();
+            }
+            if e.luminance() > picture_max {
+                picture_max = e.luminance();
+            }
+        }
+        // log::debug!(
+        //     "Typeset luminance range: [{}, {}], Picture luminance range: [{}, {}]",
+        //     typeset_min,
+        //     typeset_max,
+        //     picture_min,
+        //     picture_max
+        // );
+        log::debug!(
+            "Picture luminance range: [{}, {}]",
+            picture_min,
+            picture_max
+        );
+
+        // typeset_elements
+        //     .par_iter_mut()
+        //     .for_each(|e| e.normalized(typeset_min, typeset_max).unwrap());
+        picture_elements
+            .par_iter_mut()
+            .for_each(|e| e.normalized(picture_min, picture_max).unwrap());
+        log::debug!("Normalized typeset and picture elements.");
+
+        Ok(())
+    }
+
     pub fn from_vec(font: Vec<u8>) -> Result<Self> {
         let font = FontArc::try_from_vec(font)?;
         Ok(Model { font })
@@ -217,6 +346,7 @@ impl Model {
     }
 
     #[allow(dead_code)]
+    #[deprecated()]
     fn normalized(values: &[f64], min: f64, max: f64) -> Option<Vec<f64>> {
         if min >= max {
             return None;
