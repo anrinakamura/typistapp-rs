@@ -13,6 +13,7 @@ const NUM_OF_CANDIDATES: usize = 16;
 const IMAGE_FONT_SIZE: u32 = 18;
 const IMAGE_MARGIN: u32 = 1;
 const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
+const FULL_WIDTH_SPACE: char = '　';
 
 static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
 
@@ -50,11 +51,11 @@ impl Element {
         let outline = match font.outline_glyph(glyph) {
             Some(g) => g,
             None => {
-                if character == '　' {
+                if character == FULL_WIDTH_SPACE {
                     return Ok(Element {
                         characteristics,
                         luminance: 0.0,
-                        character: Some('　'),
+                        character: Some(FULL_WIDTH_SPACE),
                         image: None,
                     });
                 }
@@ -262,7 +263,7 @@ impl Model {
                         .get((y * columns + x) as usize)
                         .unwrap_or(&Element::default())
                         .character()
-                        .unwrap_or(char::default()),
+                        .unwrap_or(FULL_WIDTH_SPACE),
                 );
             }
         }
