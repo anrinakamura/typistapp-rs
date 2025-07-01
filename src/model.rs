@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
 use image::DynamicImage;
@@ -6,6 +8,8 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
+
+static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -33,6 +37,45 @@ impl Element {
     pub fn image(&self) -> Option<&DynamicImage> {
         self.image.as_ref()
     }
+
+    pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
+        let glyph = font.glyph_id(character).with_scale(scale);
+        let outlined_glyph = match font.outline_glyph(glyph) {
+            Some(g) => g,
+            None => {
+                return Err(anyhow!(
+                    "Failed to outline glyph for character: {}",
+                    character
+                ));
+            }
+        };
+
+        let bounds = outlined_glyph.px_bounds();
+        let (width, height) = (bounds.width().ceil() as u32, bounds.height().ceil() as u32);
+
+        if width == 0 || height == 0 {
+            return Err(anyhow!(
+                "Glyph for character '{}' has zero width or height.",
+                character
+            ));
+        }
+
+        let mut characteristics: Vec<f64> = vec![];
+        let mut total_luminance = 0.0;
+        outlined_glyph.draw(|_, _, c| {
+            total_luminance += c;
+            characteristics.push(c as f64);
+        });
+
+        let luminance = total_luminance / (width * height) as f32;
+
+        Ok(Element {
+            characteristics,
+            luminance,
+            character: Some(character),
+            image: None,
+        })
+    }
 }
 
 #[allow(dead_code)]
@@ -48,6 +91,16 @@ impl Model {
 
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         Self::from_vec(data.to_vec())
+    }
+
+    #[allow(dead_code)]
+    fn typeset_elements(&self, characters: &[char]) -> Result<Vec<Element>> {
+        let elements: Vec<Element> = characters
+            .par_iter()
+            .map(|c| Element::from_char(&self.font, *c, *GLYPH_SCALE))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(elements)
     }
 
     #[allow(dead_code)]
@@ -176,7 +229,6 @@ impl Model {
         best
     }
 
-    #[allow(dead_code)]
     fn search_typeset_element<'a>(
         picture_element: &'a Element,
         typeset_elements: &'a [Element],
@@ -220,7 +272,7 @@ mod tests {
     use super::*;
     use std::fs;
 
-    const FONT_PATH: &str = "fonts/NotoSansJP-Regular.otf";
+    const FONT_PATH: &str = "resources/NotoSansJP-Regular.otf";
 
     #[test]
     fn model_from_vec() {
