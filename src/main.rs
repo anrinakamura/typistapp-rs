@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader};
 
 use anyhow::Result;
-use typistapp::{model::Model, view::View};
+use typistapp::model::Model;
 
 fn main() -> Result<()> {
     env_logger::init();
@@ -26,8 +26,6 @@ fn run() -> Result<()> {
     log::debug!("Model created: {:?}", m);
 
     m.run(32, &chars, &image)?;
-
-    View::run();
 
     Ok(())
 }

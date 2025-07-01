@@ -11,24 +11,8 @@ pub struct View {}
 impl View {
     pub fn run() {
         let data = vec![
-            "あ".to_string(),
-            "い".to_string(),
-            "う".to_string(),
-            "え".to_string(),
-            "お".to_string(),
-            "\n".to_string(),
-            "か".to_string(),
-            "き".to_string(),
-            "く".to_string(),
-            "け".to_string(),
-            "こ".to_string(),
-            "\n".to_string(),
-            "さ".to_string(),
-            "し".to_string(),
-            "す".to_string(),
-            "せ".to_string(),
-            "そ".to_string(),
-            "\n".to_string(),
+            'あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ',
+            'そ', 'た', 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の',
         ];
 
         thread::sleep(Duration::from_secs(3));
@@ -41,7 +25,7 @@ impl View {
         log::info!("Animation completed successfully!");
     }
 
-    fn animate(data: &[String], columns: u32, rows: u32) -> std::io::Result<()> {
+    pub fn animate(data: &[char], columns: u32, rows: u32) -> std::io::Result<()> {
         let mut stdout = stdout();
 
         // clear the terminal.
