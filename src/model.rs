@@ -1,27 +1,36 @@
+use std::sync::LazyLock;
+
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView, imageops};
 use log;
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
+
+use crate::color::Color;
 
 const F64_ALMOST_ZERO: f64 = 1e-12;
 const NUM_OF_CANDIDATES: usize = 16;
+const IMAGE_FONT_SIZE: u32 = 18;
+const IMAGE_MARGIN: u32 = 1;
+const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
+const FULL_WIDTH_SPACE: char = '　';
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq)]
+static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
+
+#[derive(Debug, Clone, Default, PartialEq)]
 struct Element {
     characteristics: Vec<f64>,
-    luminance: f32,
+    luminance: f64,
     character: Option<char>,
     image: Option<DynamicImage>,
 }
 
-#[allow(dead_code)]
 impl Element {
     pub fn characteristics(&self) -> &[f64] {
         &self.characteristics
     }
 
-    pub fn luminance(&self) -> f32 {
+    pub fn luminance(&self) -> f64 {
         self.luminance
     }
 
@@ -29,24 +38,275 @@ impl Element {
         self.character
     }
 
+    #[allow(dead_code)]
     pub fn image(&self) -> Option<&DynamicImage> {
         self.image.as_ref()
     }
+
+    pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
+        let (width, height) = (IMAGE_SIZE, IMAGE_SIZE);
+        let mut characteristics = vec![0.0; (width * height) as usize];
+
+        let glyph = font.glyph_id(character).with_scale(scale);
+        let outline = match font.outline_glyph(glyph) {
+            Some(g) => g,
+            None => {
+                if character == FULL_WIDTH_SPACE {
+                    return Ok(Element {
+                        characteristics,
+                        luminance: 0.0,
+                        character: Some(FULL_WIDTH_SPACE),
+                        image: None,
+                    });
+                }
+                return Err(anyhow!(
+                    "Failed to outline glyph for character: {}",
+                    character
+                ));
+            }
+        };
+
+        let bounds = outline.px_bounds();
+
+        // canvas center - glyph center
+        let glyph_center_x = bounds.min.x + bounds.width() / 2.0;
+        let glyph_center_y = bounds.min.y + bounds.height() / 2.0;
+
+        let canvas_center_x = width as f32 / 2.0;
+        let canvas_center_y = height as f32 / 2.0;
+
+        let offset_x = canvas_center_x - glyph_center_x;
+        let offset_y = canvas_center_y - glyph_center_y;
+
+        outline.draw(|x, y, c| {
+            let canvas_x = x as f32 + offset_x;
+            let canvas_y = y as f32 + offset_y;
+
+            if canvas_x >= 0.0
+                && canvas_x < width as f32
+                && canvas_y >= 0.0
+                && canvas_y < height as f32
+            {
+                let index = (canvas_y as u32 * width + canvas_x as u32) as usize;
+                characteristics[index] = c as f64;
+            }
+        });
+
+        let luminance = characteristics.iter().sum::<f64>() / (width * height) as f64;
+
+        log::debug!(
+            "Character: '{}', Width: {}, Height: {}, Luminance: {}",
+            character,
+            width,
+            height,
+            luminance
+        );
+
+        Ok(Element {
+            characteristics,
+            luminance,
+            character: Some(character),
+            image: None,
+        })
+    }
+
+    pub fn from_image(image: DynamicImage) -> Result<Self> {
+        let (width, height) = image.dimensions();
+        log::trace!("Image dimensions: {}x{}", width, height);
+        if width == 0 || height == 0 {
+            return Err(anyhow!("Image has zero width or height."));
+        }
+
+        let mut characteristics: Vec<f64> = vec![];
+        let mut total_luminance: f64 = 0.0;
+
+        for (_, _, rgba) in image.pixels() {
+            let l = Color::luminance_from_rgba(&rgba.0);
+            total_luminance += l;
+            characteristics.push(l);
+        }
+
+        let luminance = total_luminance / (width * height) as f64;
+
+        Ok(Element {
+            characteristics,
+            luminance,
+            character: None,
+            image: Some(image),
+        })
+    }
+
+    pub fn normalized(&mut self, min: f64, max: f64) -> Result<()> {
+        if min >= max {
+            return Err(anyhow!(
+                "Invalid range: min ({}) must be less than max ({})",
+                min,
+                max
+            ));
+        }
+
+        log::trace!(
+            "Normalizing element: character: {:?}, luminance: {}",
+            self.character,
+            self.luminance,
+        );
+
+        for value in &mut self.characteristics {
+            *value = Self::normalize(*value, min, max);
+        }
+        self.luminance = Self::normalize(self.luminance, min, max);
+
+        log::trace!(
+            "Normalized element: character: {:?}, luminance: {}",
+            self.character,
+            self.luminance,
+        );
+
+        Ok(())
+    }
+
+    fn normalize(value: f64, min: f64, max: f64) -> f64 {
+        if max - min < F64_ALMOST_ZERO {
+            0.0
+        } else {
+            (value - min) / (max - min)
+        }
+    }
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct Model {
     font: FontArc,
 }
 
 impl Model {
-    pub fn from_vec(data: Vec<u8>) -> Result<Self> {
-        let font = FontArc::try_from_vec(data)?;
+    pub fn run(&mut self, length: u32, characters: &[char], image: &DynamicImage) -> Result<()> {
+        let columns = length;
+        let width = IMAGE_SIZE * columns;
+        let hight = image.height() * width / image.width();
+        let img = image.resize(width, hight, imageops::FilterType::Triangle);
+
+        let rows = hight / IMAGE_SIZE;
+        log::info!(
+            "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
+            width,
+            hight,
+            IMAGE_SIZE,
+            columns,
+            rows
+        );
+
+        let mut typeset_elements = self.typeset_elements(characters)?;
+        let mut picture_elements = self.picture_elements(&img, IMAGE_SIZE, columns, rows)?;
+        log::info!(
+            "Typeset elements: {}, Picture elements: {}",
+            typeset_elements.len(),
+            picture_elements.len()
+        );
+
+        // normalize the characteristics of typeset and picture elements.
+        let mut typeset_min = f64::INFINITY;
+        let mut typeset_max = f64::NEG_INFINITY;
+        let mut picture_min = f64::INFINITY;
+        let mut picture_max = f64::NEG_INFINITY;
+        for e in &typeset_elements {
+            if e.luminance() < typeset_min {
+                typeset_min = e.luminance();
+            }
+            if e.luminance() > typeset_max {
+                typeset_max = e.luminance();
+            }
+        }
+        for e in &picture_elements {
+            if e.luminance() < picture_min {
+                picture_min = e.luminance();
+            }
+            if e.luminance() > picture_max {
+                picture_max = e.luminance();
+            }
+        }
+        log::info!(
+            "Typeset luminance range: [{}, {}], Picture luminance range: [{}, {}]",
+            typeset_min,
+            typeset_max,
+            picture_min,
+            picture_max
+        );
+
+        typeset_elements
+            .par_iter_mut()
+            .for_each(|e| e.normalized(typeset_min, typeset_max).unwrap());
+        picture_elements
+            .par_iter_mut()
+            .for_each(|e| e.normalized(picture_min, picture_max).unwrap());
+        log::info!("Normalized typeset and picture elements.");
+
+        // sort the typeset elements by luminance.
+        typeset_elements.sort_by(|a, b| {
+            a.luminance()
+                .partial_cmp(&b.luminance())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        log::info!("Sorted typeset elements by luminance.");
+
+        let typist_art_elements = Self::convert(&picture_elements, &typeset_elements);
+        log::info!("Converted picture elements to typist art.");
+
+        let mut v = vec![];
+        for y in 0..rows {
+            for x in 0..columns {
+                if x == 0 {
+                    v.push('\n');
+                }
+                v.push(
+                    typist_art_elements
+                        .get((y * columns + x) as usize)
+                        .unwrap_or(&Element::default())
+                        .character()
+                        .unwrap_or(FULL_WIDTH_SPACE),
+                );
+            }
+        }
+        let s: String = v.iter().collect();
+        log::info!("{s}");
+
+        Ok(())
+    }
+
+    pub fn from_vec(font: Vec<u8>) -> Result<Self> {
+        let font = FontArc::try_from_vec(font)?;
         Ok(Model { font })
     }
 
-    pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        Self::from_vec(data.to_vec())
+    pub fn from_bytes(font: &[u8]) -> Result<Self> {
+        Self::from_vec(font.to_vec())
+    }
+
+    fn picture_elements(
+        &self,
+        image: &DynamicImage,
+        size: u32,
+        columns: u32,
+        rows: u32,
+    ) -> Result<Vec<Element>> {
+        let mut elements = vec![];
+        for y in 0..rows {
+            for x in 0..columns {
+                let block_image = image.crop_imm(x * size, y * size, size, size);
+                elements.push(Element::from_image(block_image)?);
+            }
+        }
+
+        Ok(elements)
+    }
+
+    fn typeset_elements(&self, characters: &[char]) -> Result<Vec<Element>> {
+        let elements: Vec<Element> = characters
+            .par_iter()
+            .map(|c| Element::from_char(&self.font, *c, *GLYPH_SCALE))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(elements)
     }
 
     #[allow(dead_code)]
@@ -116,6 +376,7 @@ impl Model {
     }
 
     #[allow(dead_code)]
+    #[deprecated()]
     fn normalized(values: &[f64], min: f64, max: f64) -> Option<Vec<f64>> {
         if min >= max {
             return None;
@@ -134,7 +395,7 @@ impl Model {
         Some(result)
     }
 
-    fn closest_luminance_index(target: f32, typeset_elements: &[Element]) -> usize {
+    fn closest_luminance_index(target: f64, typeset_elements: &[Element]) -> usize {
         let result = typeset_elements.binary_search_by(|prove| {
             prove
                 .luminance()
@@ -175,7 +436,6 @@ impl Model {
         best
     }
 
-    #[allow(dead_code)]
     fn search_typeset_element<'a>(
         picture_element: &'a Element,
         typeset_elements: &'a [Element],
@@ -200,6 +460,17 @@ impl Model {
         // STEP 3: from the candidates, find the best match using pixel-by-pixel correlation.
         Self::best_match_element(picture_element, candidates)
     }
+
+    fn convert(picture_elements: &[Element], typeset_elements: &[Element]) -> Vec<Element> {
+        let default = Element::default();
+        let typist_art_elements: Vec<Element> = picture_elements
+            .par_iter()
+            .map(|e| Self::search_typeset_element(e, typeset_elements).unwrap_or(&default))
+            .cloned()
+            .collect();
+
+        typist_art_elements
+    }
 }
 
 #[cfg(test)]
@@ -207,7 +478,19 @@ mod tests {
     use super::*;
     use std::fs;
 
-    const FONT_PATH: &str = "fonts/NotoSansJP-Regular.otf";
+    const FONT_PATH: &str = "resources/NotoSansJP-Regular.otf";
+
+    #[test]
+    fn element_from_char() {
+        let font_data = fs::read(FONT_PATH).unwrap();
+        let font = FontArc::try_from_vec(font_data).unwrap();
+        let scale = PxScale::from(16.0);
+        let element = Element::from_char(&font, 'A', scale);
+        assert!(element.is_ok());
+        let element = element.unwrap();
+        assert_eq!(element.character, Some('A'));
+        assert!(!element.characteristics.is_empty());
+    }
 
     #[test]
     fn model_from_vec() {
