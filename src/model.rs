@@ -275,6 +275,18 @@ mod tests {
     const FONT_PATH: &str = "resources/NotoSansJP-Regular.otf";
 
     #[test]
+    fn element_from_char() {
+        let font_data = fs::read(FONT_PATH).unwrap();
+        let font = FontArc::try_from_vec(font_data).unwrap();
+        let scale = PxScale::from(16.0);
+        let element = Element::from_char(&font, 'A', scale);
+        assert!(element.is_ok());
+        let element = element.unwrap();
+        assert_eq!(element.character, Some('A'));
+        assert!(!element.characteristics.is_empty());
+    }
+
+    #[test]
     fn model_from_vec() {
         let font_data = fs::read(FONT_PATH).unwrap();
         let model = Model::from_vec(font_data);
