@@ -405,36 +405,16 @@ mod tests {
 
     #[test]
     fn closest_luminance_index_single_element() {
-        let elements = vec![Element::new(
-            vec![0.0; 10],
-            0.5,
-            Some('A'),
-            None,
-        )];
+        let elements = vec![Element::new(vec![0.0; 10], 0.5, Some('A'), None)];
         assert_eq!(Model::closest_luminance_index(0.5, &elements), 0);
     }
 
     #[test]
     fn closest_luminance_index_multiple_elements() {
         let elements = vec![
-            Element::new(
-                vec![0.0; 10],
-                0.1,
-                None,
-                None,
-            ),
-            Element::new(
-                vec![0.0; 10],
-                0.5,
-                None,
-                None,
-            ),
-            Element::new(
-                vec![0.0; 10],
-                0.9,
-                None,
-                None,
-            ),
+            Element::new(vec![0.0; 10], 0.1, None, None),
+            Element::new(vec![0.0; 10], 0.5, None, None),
+            Element::new(vec![0.0; 10], 0.9, None, None),
         ];
         assert_eq!(Model::closest_luminance_index(0.5, &elements), 1);
         assert_eq!(Model::closest_luminance_index(0.2, &elements), 0);
@@ -443,43 +423,18 @@ mod tests {
 
     #[test]
     fn best_match_element_empty_candidates() {
-        let target = Element::new(
-            vec![0.5; 10],
-            0.5,
-            Some('A'),
-            None,
-        );
+        let target = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let candidates: Vec<Element> = vec![];
         assert!(Model::best_match_element(&target, &candidates).is_none());
     }
 
     #[test]
     fn best_match_element_valid_candidates() {
-        let target = Element::new(
-            vec![0.5; 10],
-            0.5,
-            Some('A'),
-            None,
-        );
+        let target = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let candidates = vec![
-            Element::new(
-                vec![0.2; 10],
-                0.2,
-                Some('B'),
-                None,
-            ),
-            Element::new(
-                vec![0.5; 10],
-                0.5,
-                Some('C'),
-                None,
-            ),
-            Element::new(
-                vec![0.7; 10],
-                0.7,
-                Some('D'),
-                None,
-            ),
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.5; 10], 0.5, Some('C'), None),
+            Element::new(vec![0.7; 10], 0.7, Some('D'), None),
         ];
         let best = Model::best_match_element(&target, &candidates);
         assert!(best.is_some());
@@ -488,49 +443,19 @@ mod tests {
 
     #[test]
     fn search_typeset_element_empty_typeset_returns_none() {
-        let picture_element = Element::new(
-            vec![0.0; 10],
-            0.5,
-            Some('A'),
-            None,
-        );
+        let picture_element = Element::new(vec![0.0; 10], 0.5, Some('A'), None);
         let typeset_elements: Vec<Element> = vec![];
         assert!(Model::search_typeset_element(&picture_element, &typeset_elements).is_none());
     }
 
     #[test]
     fn search_typeset_element_valid_typeset_returns_some() {
-        let picture_element = Element::new(
-            vec![0.5; 10],
-            0.5,
-            Some('A'),
-            None,
-        );
+        let picture_element = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let typeset_elements = vec![
-            Element::new(
-                vec![0.2; 10],
-                0.2,
-                Some('B'),
-                None,
-            ),
-            Element::new(
-                vec![0.2; 10],
-                0.2,
-                Some('B'),
-                None,
-            ),
-            Element::new(
-                vec![0.5; 10],
-                0.5,
-                Some('C'),
-                None,
-            ),
-            Element::new(
-                vec![0.7; 10],
-                0.7,
-                Some('D'),
-                None,
-            ),
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.5; 10], 0.5, Some('C'), None),
+            Element::new(vec![0.7; 10], 0.7, Some('D'), None),
         ];
         let result = Model::search_typeset_element(&picture_element, &typeset_elements);
         assert!(result.is_some());

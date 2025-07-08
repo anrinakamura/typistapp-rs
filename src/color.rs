@@ -20,9 +20,10 @@ impl Color {
         let g = rgb[1].clamp(0.0, 1.0);
         let b = rgb[2].clamp(0.0, 1.0);
 
-        // Self::luminance(r, g, b)
-        let yuv = Self::convert_rgb_to_yuv(r, g, b);
-        Self::luminance_from_yuv(&yuv)
+        // TODO: Use YUV conversion for luminance calculation
+        Self::luminance(r, g, b)
+        // let yuv = Self::convert_rgb_to_yuv(r, g, b);
+        // Self::luminance_from_yuv(&yuv)
     }
 
     pub fn luminance_from_rgba(rgba: &[u8; 4]) -> f64 {
@@ -31,7 +32,7 @@ impl Color {
         let b = rgba[2] as f64 / 255.0;
 
         // Self::luminance(r, g, b)
-        let yuv = Self::convert_rgb_to_yuv(r, g, b); 
+        let yuv = Self::convert_rgb_to_yuv(r, g, b);
         Self::luminance_from_yuv(&yuv)
     }
 
@@ -43,7 +44,7 @@ impl Color {
     fn convert_rgb_to_yuv(r: f64, g: f64, b: f64) -> [f64; 3] {
         let y = 0.299 * r + 0.587 * g + 0.114 * b;
         let u = -0.169 * r - 0.331 * g + 0.500 * b;
-        let v = 0.500 * r - 0.419 * g - 0.081 * b; 
+        let v = 0.500 * r - 0.419 * g - 0.081 * b;
         [y, u, v]
     }
 
