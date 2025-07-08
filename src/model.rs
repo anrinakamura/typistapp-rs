@@ -1,178 +1,11 @@
-use std::sync::LazyLock;
-
 use ab_glyph::{Font, FontArc, PxScale};
 use anyhow::{Result, anyhow};
-use image::{DynamicImage, GenericImageView, imageops};
+use image::{DynamicImage, imageops};
 use log;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::{color::Color, view::View};
-
-const F64_ALMOST_ZERO: f64 = 1e-12;
-const NUM_OF_CANDIDATES: usize = 16;
-const IMAGE_FONT_SIZE: u32 = 18;
-const IMAGE_MARGIN: u32 = 1;
-const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
-const FULL_WIDTH_SPACE: char = '　';
-
-static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
-
-#[derive(Debug, Clone, Default, PartialEq)]
-struct Element {
-    characteristics: Vec<f64>,
-    luminance: f64,
-    character: Option<char>,
-    image: Option<DynamicImage>,
-}
-
-impl Element {
-    pub fn characteristics(&self) -> &[f64] {
-        &self.characteristics
-    }
-
-    pub fn luminance(&self) -> f64 {
-        self.luminance
-    }
-
-    pub fn character(&self) -> Option<char> {
-        self.character
-    }
-
-    #[allow(dead_code)]
-    pub fn image(&self) -> Option<&DynamicImage> {
-        self.image.as_ref()
-    }
-
-    pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
-        let (width, height) = (IMAGE_SIZE, IMAGE_SIZE);
-        let mut characteristics = vec![0.0; (width * height) as usize];
-
-        let glyph = font.glyph_id(character).with_scale(scale);
-        let outline = match font.outline_glyph(glyph) {
-            Some(g) => g,
-            None => {
-                if character == FULL_WIDTH_SPACE {
-                    return Ok(Element {
-                        characteristics,
-                        luminance: 0.0,
-                        character: Some(FULL_WIDTH_SPACE),
-                        image: None,
-                    });
-                }
-                return Err(anyhow!(
-                    "Failed to outline glyph for character: {}",
-                    character
-                ));
-            }
-        };
-
-        let bounds = outline.px_bounds();
-
-        // canvas center - glyph center
-        let glyph_center_x = bounds.min.x + bounds.width() / 2.0;
-        let glyph_center_y = bounds.min.y + bounds.height() / 2.0;
-
-        let canvas_center_x = width as f32 / 2.0;
-        let canvas_center_y = height as f32 / 2.0;
-
-        let offset_x = canvas_center_x - glyph_center_x;
-        let offset_y = canvas_center_y - glyph_center_y;
-
-        outline.draw(|x, y, c| {
-            let canvas_x = x as f32 + offset_x;
-            let canvas_y = y as f32 + offset_y;
-
-            if canvas_x >= 0.0
-                && canvas_x < width as f32
-                && canvas_y >= 0.0
-                && canvas_y < height as f32
-            {
-                let index = (canvas_y as u32 * width + canvas_x as u32) as usize;
-                characteristics[index] = c as f64;
-            }
-        });
-
-        let luminance = characteristics.iter().sum::<f64>() / (width * height) as f64;
-
-        log::debug!(
-            "Character: '{}', Width: {}, Height: {}, Luminance: {}",
-            character,
-            width,
-            height,
-            luminance
-        );
-
-        Ok(Element {
-            characteristics,
-            luminance,
-            character: Some(character),
-            image: None,
-        })
-    }
-
-    pub fn from_image(image: DynamicImage) -> Result<Self> {
-        let (width, height) = image.dimensions();
-        log::trace!("Image dimensions: {}x{}", width, height);
-        if width == 0 || height == 0 {
-            return Err(anyhow!("Image has zero width or height."));
-        }
-
-        let mut characteristics: Vec<f64> = vec![];
-        let mut total_luminance: f64 = 0.0;
-
-        for (_, _, rgba) in image.pixels() {
-            let l = Color::luminance_from_rgba(&rgba.0);
-            total_luminance += l;
-            characteristics.push(l);
-        }
-
-        let luminance = total_luminance / (width * height) as f64;
-
-        Ok(Element {
-            characteristics,
-            luminance,
-            character: None,
-            image: Some(image),
-        })
-    }
-
-    pub fn normalized(&mut self, min: f64, max: f64) -> Result<()> {
-        if min >= max {
-            return Err(anyhow!(
-                "Invalid range: min ({}) must be less than max ({})",
-                min,
-                max
-            ));
-        }
-
-        log::trace!(
-            "Normalizing element: character: {:?}, luminance: {}",
-            self.character,
-            self.luminance,
-        );
-
-        for value in &mut self.characteristics {
-            *value = Self::normalize(*value, min, max);
-        }
-        self.luminance = Self::normalize(self.luminance, min, max);
-
-        log::trace!(
-            "Normalized element: character: {:?}, luminance: {}",
-            self.character,
-            self.luminance,
-        );
-
-        Ok(())
-    }
-
-    fn normalize(value: f64, min: f64, max: f64) -> f64 {
-        if max - min < F64_ALMOST_ZERO {
-            0.0
-        } else {
-            (value - min) / (max - min)
-        }
-    }
-}
+use crate::{F64_ALMOST_ZERO, FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
+use crate::{element::Element, view::View};
 
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -495,8 +328,8 @@ mod tests {
         let element = Element::from_char(&font, 'A', scale);
         assert!(element.is_ok());
         let element = element.unwrap();
-        assert_eq!(element.character, Some('A'));
-        assert!(!element.characteristics.is_empty());
+        assert_eq!(element.character(), Some('A'));
+        assert!(!element.characteristics().is_empty());
     }
 
     #[test]
@@ -565,36 +398,16 @@ mod tests {
 
     #[test]
     fn closest_luminance_index_single_element() {
-        let elements = vec![Element {
-            characteristics: vec![0.0; 10],
-            luminance: 0.5,
-            character: Some('A'),
-            image: None,
-        }];
+        let elements = vec![Element::new(vec![0.0; 10], 0.5, Some('A'), None)];
         assert_eq!(Model::closest_luminance_index(0.5, &elements), 0);
     }
 
     #[test]
     fn closest_luminance_index_multiple_elements() {
         let elements = vec![
-            Element {
-                characteristics: vec![0.0; 10],
-                luminance: 0.1,
-                character: None,
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.0; 10],
-                luminance: 0.5,
-                character: None,
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.0; 10],
-                luminance: 0.9,
-                character: None,
-                image: None,
-            },
+            Element::new(vec![0.0; 10], 0.1, None, None),
+            Element::new(vec![0.0; 10], 0.5, None, None),
+            Element::new(vec![0.0; 10], 0.9, None, None),
         ];
         assert_eq!(Model::closest_luminance_index(0.5, &elements), 1);
         assert_eq!(Model::closest_luminance_index(0.2, &elements), 0);
@@ -603,43 +416,18 @@ mod tests {
 
     #[test]
     fn best_match_element_empty_candidates() {
-        let target = Element {
-            characteristics: vec![0.5; 10],
-            luminance: 0.5,
-            character: Some('A'),
-            image: None,
-        };
+        let target = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let candidates: Vec<Element> = vec![];
         assert!(Model::best_match_element(&target, &candidates).is_none());
     }
 
     #[test]
     fn best_match_element_valid_candidates() {
-        let target = Element {
-            characteristics: vec![0.5; 10],
-            luminance: 0.5,
-            character: Some('A'),
-            image: None,
-        };
+        let target = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let candidates = vec![
-            Element {
-                characteristics: vec![0.2; 10],
-                luminance: 0.2,
-                character: Some('B'),
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.5; 10],
-                luminance: 0.5,
-                character: Some('C'),
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.7; 10],
-                luminance: 0.7,
-                character: Some('D'),
-                image: None,
-            },
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.5; 10], 0.5, Some('C'), None),
+            Element::new(vec![0.7; 10], 0.7, Some('D'), None),
         ];
         let best = Model::best_match_element(&target, &candidates);
         assert!(best.is_some());
@@ -648,43 +436,19 @@ mod tests {
 
     #[test]
     fn search_typeset_element_empty_typeset_returns_none() {
-        let picture_element = Element {
-            characteristics: vec![0.0; 10],
-            luminance: 0.5,
-            character: Some('A'),
-            image: None,
-        };
+        let picture_element = Element::new(vec![0.0; 10], 0.5, Some('A'), None);
         let typeset_elements: Vec<Element> = vec![];
         assert!(Model::search_typeset_element(&picture_element, &typeset_elements).is_none());
     }
 
     #[test]
     fn search_typeset_element_valid_typeset_returns_some() {
-        let picture_element = Element {
-            characteristics: vec![0.5; 10],
-            luminance: 0.5,
-            character: Some('A'),
-            image: None,
-        };
+        let picture_element = Element::new(vec![0.5; 10], 0.5, Some('A'), None);
         let typeset_elements = vec![
-            Element {
-                characteristics: vec![0.2; 10],
-                luminance: 0.2,
-                character: Some('B'),
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.5; 10],
-                luminance: 0.5,
-                character: Some('C'),
-                image: None,
-            },
-            Element {
-                characteristics: vec![0.7; 10],
-                luminance: 0.7,
-                character: Some('D'),
-                image: None,
-            },
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.2; 10], 0.2, Some('B'), None),
+            Element::new(vec![0.5; 10], 0.5, Some('C'), None),
+            Element::new(vec![0.7; 10], 0.7, Some('D'), None),
         ];
         let result = Model::search_typeset_element(&picture_element, &typeset_elements);
         assert!(result.is_some());
