@@ -2,6 +2,9 @@
 name = "typistapp"
 version = "0.1.0"
 edition = "2024"
+author = "anrinakamura"
+description = "Typist-art generator for TUI"
+license = "MIT"
 
 [dependencies]
 ab_glyph = "0.2.29"
