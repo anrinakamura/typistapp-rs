@@ -15,8 +15,8 @@ impl Color {
     /// # Example
     ///
     /// ```no_run
-    /// use typistapp::color::Color; 
-    /// 
+    /// use typistapp::color::Color;
+    ///
     /// let luminance = Color::luminance_from_rgba(&[255, 255, 255, 255]);
     /// assert!(luminance > 0.9);
     /// ```
