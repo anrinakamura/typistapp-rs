@@ -1,132 +1,78 @@
-use ab_glyph::{Font, FontArc, PxScale};
-use anyhow::{Result, anyhow};
+use ab_glyph::FontArc;
+use anyhow::Result;
 use image::{DynamicImage, imageops};
 use log;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 
+use crate::correlation::correlation;
+use crate::element::Element;
 use crate::{F64_ALMOST_ZERO, FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
-use crate::{element::Element, view::View};
 
 #[derive(Debug, Clone)]
 pub struct Model {
+    image: DynamicImage,
+    characters: Vec<char>,
     font: FontArc,
+    columns: u32,
+    rows: u32,
 }
 
 impl Model {
-    pub fn run(&mut self, length: u32, characters: &[char], image: &DynamicImage) -> Result<()> {
+    pub fn new(length: u32, image: &DynamicImage, characters: &[char], font: &[u8]) -> Self {
         let columns = length;
         let width = IMAGE_SIZE * columns;
-        let hight = image.height() * width / image.width();
-        let img = image.resize(width, hight, imageops::FilterType::Triangle);
-
-        let rows = hight / IMAGE_SIZE;
+        let height = image.height() * width / image.width();
+        let img = image.resize(width, height, imageops::FilterType::Triangle);
+        let rows = height / IMAGE_SIZE;
         log::info!(
             "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
             width,
-            hight,
+            height,
             IMAGE_SIZE,
             columns,
             rows
         );
 
-        let mut typeset_elements = self.typeset_elements(characters)?;
-        let mut picture_elements = self.picture_elements(&img, IMAGE_SIZE, columns, rows)?;
+        Model {
+            image: img,
+            characters: characters.to_vec(),
+            font: FontArc::try_from_vec(font.to_vec()).unwrap(),
+            columns,
+            rows,
+        }
+    }
+
+    pub fn convert(&mut self) -> Result<Vec<String>> {
+        let typeset_elements = self.typeset_elements(&self.characters)?;
+        let picture_elements =
+            self.picture_elements(&self.image, IMAGE_SIZE, self.columns, self.rows)?;
         log::info!(
             "Typeset elements: {}, Picture elements: {}",
             typeset_elements.len(),
             picture_elements.len()
         );
 
-        // normalize the characteristics of typeset and picture elements.
-        let mut typeset_min = f64::INFINITY;
-        let mut typeset_max = f64::NEG_INFINITY;
-        let mut picture_min = f64::INFINITY;
-        let mut picture_max = f64::NEG_INFINITY;
-        for e in &typeset_elements {
-            if e.luminance() < typeset_min {
-                typeset_min = e.luminance();
-            }
-            if e.luminance() > typeset_max {
-                typeset_max = e.luminance();
-            }
-        }
-        for e in &picture_elements {
-            if e.luminance() < picture_min {
-                picture_min = e.luminance();
-            }
-            if e.luminance() > picture_max {
-                picture_max = e.luminance();
-            }
-        }
-        log::info!(
-            "Typeset luminance range: [{}, {}], Picture luminance range: [{}, {}]",
-            typeset_min,
-            typeset_max,
-            picture_min,
-            picture_max
-        );
-
-        typeset_elements
-            .par_iter_mut()
-            .for_each(|e| e.normalized(typeset_min, typeset_max).unwrap());
-        picture_elements
-            .par_iter_mut()
-            .for_each(|e| e.normalized(picture_min, picture_max).unwrap());
-        log::info!("Normalized typeset and picture elements.");
-
-        // sort the typeset elements by luminance.
-        typeset_elements.sort_by(|a, b| {
-            a.luminance()
-                .partial_cmp(&b.luminance())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        log::info!("Sorted typeset elements by luminance.");
-        for e in &typeset_elements {
-            log::debug!(
-                "Character: {:?}, Luminance: {}",
-                e.character(),
-                e.luminance(),
-            );
-        }
-
-        let typist_art_elements = Self::convert(&picture_elements, &typeset_elements);
+        let typist_art_elements = Self::generate_typist_art(&picture_elements, &typeset_elements);
         log::info!("Converted picture elements to typist art.");
 
-        // let mut v = vec![];
-        // for y in 0..rows {
-        //     for x in 0..columns {
-        //         if x == 0 {
-        //             v.push('\n');
-        //         }
-        //         v.push(
-        //             typist_art_elements
-        //                 .get((y * columns + x) as usize)
-        //                 .unwrap_or(&Element::default())
-        //                 .character()
-        //                 .unwrap_or(FULL_WIDTH_SPACE),
-        //         );
-        //     }
-        // }
-        // let s: String = v.iter().collect();
-        // log::info!("{s}");
+        let mut result = vec![];
+        let mut v = vec![];
+        for (i, e) in typist_art_elements.iter().enumerate() {
+            if i % self.columns as usize == 0 && i != 0 {
+                result.push(v.iter().collect());
+                v.clear();
+            }
+            v.push(e.character().unwrap_or(FULL_WIDTH_SPACE));
+        }
 
-        let data: Vec<char> = typist_art_elements
-            .iter()
-            .map(|e| e.character().unwrap_or(FULL_WIDTH_SPACE))
-            .collect();
-        View::animate(&data, columns, rows)?;
-        log::info!("Animation completed successfully!");
+        // let data: Vec<char> = typist_art_elements
+        //     .iter()
+        //     .map(|e| e.character().unwrap_or(FULL_WIDTH_SPACE))
+        //     .collect();
+        // View::animate(&data, self.columns, self.rows)?;
+        // log::info!("Animation completed successfully!");
 
-        Ok(())
-    }
-
-    pub fn from_vec(font: Vec<u8>) -> Result<Self> {
-        let font = FontArc::try_from_vec(font)?;
-        Ok(Model { font })
-    }
-
-    pub fn from_bytes(font: &[u8]) -> Result<Self> {
-        Self::from_vec(font.to_vec())
+        Ok(result)
     }
 
     fn picture_elements(
@@ -144,82 +90,58 @@ impl Model {
             }
         }
 
+        // normalize the luminance of the picture elements.
+        Self::normalize_elements(&mut elements)?;
+
         Ok(elements)
     }
 
     fn typeset_elements(&self, characters: &[char]) -> Result<Vec<Element>> {
-        let elements: Vec<Element> = characters
+        let mut elements: Vec<Element> = characters
             .par_iter()
             .map(|c| Element::from_char(&self.font, *c, *GLYPH_SCALE))
             .collect::<Result<Vec<_>>>()?;
 
+        // normalize the luminance of the typeset elements.
+        Self::normalize_elements(&mut elements)?;
+
+        // sort the typeset elements by luminance.
+        elements.sort_by(|a, b| {
+            a.luminance()
+                .partial_cmp(&b.luminance())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        log::debug!("Sorted typeset elements by luminance.");
+        for e in &elements {
+            log::debug!(
+                "Character: {:?}, Luminance: {}",
+                e.character(),
+                e.luminance(),
+            );
+        }
+
         Ok(elements)
     }
 
-    #[allow(dead_code)]
-    fn glyph_luminance(&self, character: char, scale: PxScale) -> Result<f32> {
-        let glyph = self.font.glyph_id(character).with_scale(scale);
-        let outlined_glyph = match self.font.outline_glyph(glyph) {
-            Some(g) => g,
-            None => {
-                return Err(anyhow!(
-                    "Failed to outline glyph for character: {}",
-                    character
-                ));
+    fn normalize_elements(elements: &mut [Element]) -> Result<()> {
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
+        for e in elements.into_iter() {
+            if e.luminance() < min {
+                min = e.luminance();
             }
-        };
-
-        let bounds = outlined_glyph.px_bounds();
-        let (width, height) = (bounds.width().ceil() as u32, bounds.height().ceil() as u32);
-
-        if width == 0 || height == 0 {
-            return Ok(0.0);
+            if e.luminance() > max {
+                max = e.luminance();
+            }
         }
+        log::info!("Luminance range: [{}, {}]", min, max,);
 
-        let mut total_luminance = 0.0;
-        outlined_glyph.draw(|_, _, c| {
-            total_luminance += c;
-        });
+        elements
+            .par_iter_mut()
+            .for_each(|e| e.normalized(min, max).unwrap());
+        log::info!("Normalized elements.");
 
-        let average_luminance = total_luminance / (width * height) as f32;
-        Ok(average_luminance)
-    }
-
-    pub fn correlation(x_values: &[f64], y_values: &[f64]) -> Option<f64> {
-        if x_values.len() != y_values.len() || x_values.is_empty() || y_values.is_empty() {
-            return None;
-        }
-
-        let n = x_values.len();
-        let mean_x = x_values.iter().sum::<f64>() / n as f64;
-        let mean_y = y_values.iter().sum::<f64>() / n as f64;
-
-        let mut numerator = 0.0;
-        let mut den_x = 0.0;
-        let mut den_y = 0.0;
-
-        for (x, y) in x_values.iter().zip(y_values.iter()) {
-            let diff_x = x - mean_x;
-            let diff_y = y - mean_y;
-            numerator += diff_x * diff_y;
-            den_x += diff_x * diff_x;
-            den_y += diff_y * diff_y;
-        }
-
-        let denominator = den_x.sqrt() * den_y.sqrt();
-        if denominator.abs() < F64_ALMOST_ZERO {
-            let is_den_x_zero = den_x.abs() < F64_ALMOST_ZERO;
-            let is_den_y_zero = den_y.abs() < F64_ALMOST_ZERO;
-            let are_means_equal = (mean_x - mean_y).abs() < F64_ALMOST_ZERO;
-
-            return match (is_den_x_zero, is_den_y_zero, are_means_equal) {
-                (true, true, true) => Some(1.0),
-                _ => Some(0.0),
-            };
-        }
-
-        log::trace!("numerator: {}, denominator: {}", numerator, denominator);
-        Some(numerator / denominator)
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -270,8 +192,7 @@ impl Model {
         let mut max = -1.0;
         let mut best: Option<&Element> = None;
         for candidate in candidates {
-            if let Some(result) =
-                Self::correlation(target.characteristics(), candidate.characteristics())
+            if let Some(result) = correlation(target.characteristics(), candidate.characteristics())
             {
                 if result > max {
                     max = result;
@@ -308,7 +229,10 @@ impl Model {
         Self::best_match_element(picture_element, candidates)
     }
 
-    fn convert(picture_elements: &[Element], typeset_elements: &[Element]) -> Vec<Element> {
+    fn generate_typist_art(
+        picture_elements: &[Element],
+        typeset_elements: &[Element],
+    ) -> Vec<Element> {
         let default = Element::default();
         let typist_art_elements: Vec<Element> = picture_elements
             .par_iter()
@@ -323,58 +247,6 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-
-    const FONT_PATH: &str = "resources/NotoSansJP-Regular.otf";
-
-    #[test]
-    fn element_from_char() {
-        let font_data = fs::read(FONT_PATH).unwrap();
-        let font = FontArc::try_from_vec(font_data).unwrap();
-        let scale = PxScale::from(16.0);
-        let element = Element::from_char(&font, 'A', scale);
-        assert!(element.is_ok());
-        let element = element.unwrap();
-        assert_eq!(element.character(), Some('A'));
-        assert!(!element.characteristics().is_empty());
-    }
-
-    #[test]
-    fn model_from_vec() {
-        let font_data = fs::read(FONT_PATH).unwrap();
-        let model = Model::from_vec(font_data);
-        assert!(model.is_ok());
-    }
-
-    #[test]
-    fn glyph_luminance() {
-        let font_data = fs::read(FONT_PATH).unwrap();
-        let model = Model::from_bytes(&font_data).unwrap();
-        let scale = PxScale::from(16.0);
-        let result = model.glyph_luminance('A', scale);
-        assert!(result.is_ok());
-        let luminance = result.unwrap();
-        assert!(luminance >= 0.0 && luminance <= 1.0);
-    }
-
-    #[test]
-    fn correlation_different_lengths_returns_none() {
-        assert_eq!(Model::correlation(&[1.0], &[1.0, 2.0]), None);
-    }
-
-    #[test]
-    fn correlation_empty_slices_returns_none() {
-        assert_eq!(Model::correlation(&[], &[]), None);
-    }
-
-    #[test]
-    fn correlation_valid_data_returns_some() {
-        let x_values = [1.0, 2.0, 3.0];
-        let y_values = [4.0, 5.0, 6.0];
-        let result = Model::correlation(&x_values, &y_values);
-        assert!(result.is_some());
-        assert!((result.unwrap() - 1.0).abs() < 1e-9);
-    }
 
     #[test]
     fn normalized_invalid_range_returns_none() {

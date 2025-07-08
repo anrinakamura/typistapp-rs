@@ -2,6 +2,7 @@ use ab_glyph::PxScale;
 use std::sync::LazyLock;
 
 pub mod color;
+pub mod correlation;
 pub mod element;
 pub mod model;
 pub mod view;
@@ -12,5 +13,6 @@ const IMAGE_FONT_SIZE: u32 = 18;
 const IMAGE_MARGIN: u32 = 1;
 const IMAGE_SIZE: u32 = IMAGE_FONT_SIZE + IMAGE_MARGIN * 2;
 const FULL_WIDTH_SPACE: char = '　';
+const PER_CHARACTER_DELAY_MS: u64 = 10;
 
 static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));

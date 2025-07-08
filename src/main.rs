@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader};
 
 use anyhow::Result;
 use clap::Parser;
-use typistapp::model::Model;
+use typistapp::{model::Model, view::View};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -30,16 +30,22 @@ fn run(args: &Args) -> Result<()> {
     for line in reader.lines() {
         chars.extend(line?.chars());
     }
-    log::debug!("chars: {:?}", chars);
+    log::debug!("Typeset: {:?}", chars);
 
     let image = image::open(&args.image_path)?;
     log::debug!("Image loaded: {}", args.image_path);
 
     let font_data = std::fs::read(&args.font_path)?;
-    let mut m = Model::from_vec(font_data)?;
+    let mut m = Model::new(args.length, &image, &chars, &font_data);
     log::debug!("Model created: {:?}", m);
 
-    m.run(args.length, &chars, &image)?;
+    let s = m.convert()?;
+    for line in &s {
+        log::debug!("{}", line);
+    }
+
+    View::animate(&s)?;
+    log::info!("Animation completed successfully!");
 
     Ok(())
 }
