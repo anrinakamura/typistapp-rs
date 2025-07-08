@@ -8,29 +8,42 @@ use crate::correlation::correlation;
 use crate::element::Element;
 use crate::{FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
 
+/// A struct that serves as the Model (M) in MVC. Specializes in data management.
+/// Converts an image into typist-art using a set of full-width characters and a font.
 #[derive(Debug, Clone)]
 pub struct Model {
+
+    /// The source image to be converted to typist-art.
     image: DynamicImage,
+
+    /// A collection of full-width characters used for rendering the art.
     characters: Vec<char>,
+
+    /// The font used to render each character.
     font: FontArc,
+
+    /// The number of characters (columns) per line in the output art.
     columns: u32,
-    rows: u32,
+
+    /// The total number of lines (rows) in the output art.
+    lines: u32,
 }
 
 impl Model {
+    /// Creates a new Model instance with a resized image and initialized parameters.
     pub fn new(length: u32, image: &DynamicImage, characters: &[char], font: &[u8]) -> Self {
         let columns = length;
         let width = IMAGE_SIZE * columns;
         let height = image.height() * width / image.width();
         let img = image.resize(width, height, imageops::FilterType::Triangle);
-        let rows = height / IMAGE_SIZE;
+        let lines = height / IMAGE_SIZE;
         log::info!(
-            "Image dimensions: {}x{}, size: {}, columns: {}, rows: {}",
+            "Image dimensions: {}x{}, size: {}, columns: {}, lines: {}",
             width,
             height,
             IMAGE_SIZE,
             columns,
-            rows
+            lines
         );
 
         Model {
@@ -38,14 +51,15 @@ impl Model {
             characters: characters.to_vec(),
             font: FontArc::try_from_vec(font.to_vec()).unwrap(),
             columns,
-            rows,
+            lines,
         }
     }
 
+    /// Converts the input image into a vector of typist-art strings.
     pub fn convert(&mut self) -> Result<Vec<String>> {
         let typeset_elements = self.typeset_elements(&self.characters)?;
         let picture_elements =
-            self.picture_elements(&self.image, IMAGE_SIZE, self.columns, self.rows)?;
+            self.picture_elements(&self.image, IMAGE_SIZE, self.columns, self.lines)?;
         log::info!(
             "Typeset elements: {}, Picture elements: {}",
             typeset_elements.len(),
@@ -68,15 +82,17 @@ impl Model {
         Ok(result)
     }
 
+    /// Divides the input image into a grid of picture elements (tiles),
+    /// computes their luminance characteristics, and normalizes them.
     fn picture_elements(
         &self,
         image: &DynamicImage,
         size: u32,
         columns: u32,
-        rows: u32,
+        lines: u32,
     ) -> Result<Vec<Element>> {
         let mut elements = vec![];
-        for y in 0..rows {
+        for y in 0..lines {
             for x in 0..columns {
                 let block_image = image.crop_imm(x * size, y * size, size, size);
                 elements.push(Element::from_image(block_image)?);
@@ -89,6 +105,8 @@ impl Model {
         Ok(elements)
     }
 
+    /// Renders each character into an image using the given font, converts
+    /// them into elements, normalizes their luminance, and sorts them by brightness.
     fn typeset_elements(&self, characters: &[char]) -> Result<Vec<Element>> {
         let mut elements: Vec<Element> = characters
             .par_iter()
@@ -116,6 +134,8 @@ impl Model {
         Ok(elements)
     }
 
+    /// Normalizes the luminance and pixel characteristics of each element
+    /// so that all values are within a common range.
     fn normalize_elements(elements: &mut [Element]) -> Result<()> {
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
@@ -137,6 +157,8 @@ impl Model {
         Ok(())
     }
 
+    /// Finds the index of the element in the typeset list whose luminance is
+    /// closest to the given target luminance value.
     fn closest_luminance_index(target: f64, typeset_elements: &[Element]) -> usize {
         let result = typeset_elements.binary_search_by(|prove| {
             prove
@@ -161,6 +183,8 @@ impl Model {
         }
     }
 
+    /// Selects the best-matching element from the given candidates
+    /// based on pixel-wise correlation similarity.
     fn best_match_element<'a>(target: &Element, candidates: &'a [Element]) -> Option<&'a Element> {
         let mut max = -1.0;
         let mut best: Option<&Element> = None;
@@ -177,6 +201,8 @@ impl Model {
         best
     }
 
+    /// Finds the best-matching character element for a picture element
+    /// by combining luminance-based preselection and pixel correlation.
     fn search_typeset_element<'a>(
         picture_element: &'a Element,
         typeset_elements: &'a [Element],
@@ -202,6 +228,8 @@ impl Model {
         Self::best_match_element(picture_element, candidates)
     }
 
+    /// Converts the picture elements into their best-matching character elements
+    /// to generate the final typist-art structure.
     fn generate_typist_art(
         picture_elements: &[Element],
         typeset_elements: &[Element],
