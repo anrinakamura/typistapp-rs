@@ -6,7 +6,7 @@ use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelI
 
 use crate::correlation::correlation;
 use crate::element::Element;
-use crate::{F64_ALMOST_ZERO, FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
+use crate::{FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
 
 #[derive(Debug, Clone)]
 pub struct Model {
@@ -64,13 +64,6 @@ impl Model {
             }
             v.push(e.character().unwrap_or(FULL_WIDTH_SPACE));
         }
-
-        // let data: Vec<char> = typist_art_elements
-        //     .iter()
-        //     .map(|e| e.character().unwrap_or(FULL_WIDTH_SPACE))
-        //     .collect();
-        // View::animate(&data, self.columns, self.rows)?;
-        // log::info!("Animation completed successfully!");
 
         Ok(result)
     }
@@ -142,26 +135,6 @@ impl Model {
         log::info!("Normalized elements.");
 
         Ok(())
-    }
-
-    #[allow(dead_code)]
-    #[deprecated()]
-    fn normalized(values: &[f64], min: f64, max: f64) -> Option<Vec<f64>> {
-        if min >= max {
-            return None;
-        }
-
-        let range = max - min;
-        let result: Vec<f64> = if range.abs() < F64_ALMOST_ZERO {
-            vec![0.0; values.len()]
-        } else {
-            values
-                .iter()
-                .map(|&v| (v - min) / range)
-                .collect::<Vec<_>>()
-        };
-
-        Some(result)
     }
 
     fn closest_luminance_index(target: f64, typeset_elements: &[Element]) -> usize {
@@ -247,27 +220,6 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn normalized_invalid_range_returns_none() {
-        assert_eq!(Model::normalized(&[1.0, 2.0, 3.0], 3.0, 1.0), None);
-    }
-
-    #[test]
-    fn normalized_empty_values_returns_some() {
-        assert_eq!(Model::normalized(&vec![], 0.0, 1.0), Some(vec![]));
-    }
-
-    #[test]
-    fn normalized_valid_range_returns_some() {
-        let values = [1.0, 2.0, 3.0];
-        let min = 1.0;
-        let max = 3.0;
-        let expected = vec![0.0, 0.5, 1.0];
-        let result = Model::normalized(&values, min, max);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap(), expected);
-    }
 
     #[test]
     fn closest_luminance_index_empty_elements() {

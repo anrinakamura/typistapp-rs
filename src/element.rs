@@ -195,4 +195,20 @@ mod tests {
         assert_eq!(element.character, Some('A'));
         assert!(!element.characteristics.is_empty());
     }
+
+    #[test]
+    fn normalized_invalid_range_returns_err() {
+        let mut element = Element::new(vec![0.5, 0.6, 0.7], 0.6, Some('A'), None);
+        let result = element.normalized(0.7, 0.5);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalized_valid_range_returns_ok() {
+        let mut element = Element::new(vec![0.5, 0.6, 0.7], 0.6, Some('A'), None);
+        let result = element.normalized(0.5, 0.7);
+        assert!(result.is_ok());
+        assert_eq!(element.characteristics, vec![0.0, 0.5, 1.0]);
+        assert_eq!(element.luminance, 0.5);
+    }
 }
