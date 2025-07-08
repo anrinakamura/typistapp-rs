@@ -48,7 +48,7 @@ impl Element {
 
     pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
         let (width, height) = (IMAGE_SIZE, IMAGE_SIZE);
-        let mut characteristics = vec![0.0; (width * height) as usize];
+        let mut characteristics = vec![1.0; (width * height) as usize];
 
         let glyph = font.glyph_id(character).with_scale(scale);
         let outline = match font.outline_glyph(glyph) {
@@ -57,8 +57,8 @@ impl Element {
                 if character == FULL_WIDTH_SPACE {
                     return Ok(Element {
                         characteristics,
-                        luminance: 0.0,
-                        character: Some(FULL_WIDTH_SPACE),
+                        luminance: 1.0,
+                        character: Some('　'),
                         image: None,
                     });
                 }
@@ -91,7 +91,7 @@ impl Element {
                 && canvas_y < height as f32
             {
                 let index = (canvas_y as u32 * width + canvas_x as u32) as usize;
-                characteristics[index] = c as f64;
+                characteristics[index] = 1.0 - (c as f64);
             }
         });
 
