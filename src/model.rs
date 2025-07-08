@@ -1,5 +1,5 @@
 use ab_glyph::FontArc;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use image::{DynamicImage, imageops};
 use log;
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
@@ -30,7 +30,12 @@ pub struct Model {
 
 impl Model {
     /// Creates a new Model instance with a resized image and initialized parameters.
-    pub fn new(length: u32, image: &DynamicImage, characters: &[char], font: &[u8]) -> Self {
+    pub fn new(
+        length: u32,
+        image: &DynamicImage,
+        characters: &[char],
+        font: &[u8],
+    ) -> Result<Self> {
         let columns = length;
         let width = IMAGE_SIZE * columns;
         let height = image.height() * width / image.width();
@@ -39,14 +44,18 @@ impl Model {
         log::info!(
             "Image dimensions: {width}x{height}, size: {IMAGE_SIZE}, columns: {columns}, lines: {lines}",
         );
+        let font = match FontArc::try_from_vec(font.to_vec()) {
+            Ok(f) => f,
+            Err(e) => bail!("Failed to load font: {}", e),
+        };
 
-        Model {
+        Ok(Model {
             image: img,
             characters: characters.to_vec(),
-            font: FontArc::try_from_vec(font.to_vec()).unwrap(),
+            font,
             columns,
             lines,
-        }
+        })
     }
 
     /// Converts the input image into a vector of typist-art strings.
@@ -71,6 +80,9 @@ impl Model {
                 v.clear();
             }
             v.push(e.character().unwrap_or(FULL_WIDTH_SPACE));
+        }
+        if !v.is_empty() {
+            result.push(v.iter().collect());
         }
 
         Ok(result)

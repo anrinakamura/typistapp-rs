@@ -36,7 +36,7 @@ fn run(args: &Args) -> Result<()> {
     log::debug!("Image loaded: {}", args.image_path);
 
     let font_data = std::fs::read(&args.font_path)?;
-    let mut m = Model::new(args.length, &image, &chars, &font_data);
+    let mut m = Model::new(args.length, &image, &chars, &font_data)?;
     log::debug!("Model created: {m:?}");
 
     let s = m.convert()?;
