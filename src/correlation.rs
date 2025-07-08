@@ -38,7 +38,7 @@ pub fn correlation(x_values: &[f64], y_values: &[f64]) -> Option<f64> {
     }
 
     let result = numerator / denominator;
-    log::trace!("Correlation result: {}", result);
+    log::trace!("Correlation result: {result}");
     Some(result)
 }
 

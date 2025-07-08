@@ -25,8 +25,8 @@ impl View {
             cursor::Hide
         )?;
 
-        for y in 0..data.len() {
-            for (x, c) in data[y].chars().enumerate() {
+        for (y, line) in data.iter().enumerate() {
+            for (x, c) in line.chars().enumerate() {
                 execute!(stdout, cursor::MoveTo((x * 2) as u16, y as u16), Print(c))?;
                 stdout.flush()?;
                 thread::sleep(Duration::from_millis(PER_CHARACTER_DELAY_MS));

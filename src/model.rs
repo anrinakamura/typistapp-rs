@@ -37,12 +37,7 @@ impl Model {
         let img = image.resize(width, height, imageops::FilterType::Triangle);
         let lines = height / IMAGE_SIZE;
         log::info!(
-            "Image dimensions: {}x{}, size: {}, columns: {}, lines: {}",
-            width,
-            height,
-            IMAGE_SIZE,
-            columns,
-            lines
+            "Image dimensions: {width}x{height}, size: {IMAGE_SIZE}, columns: {columns}, lines: {lines}",
         );
 
         Model {
@@ -138,7 +133,7 @@ impl Model {
     fn normalize_elements(elements: &mut [Element]) -> Result<()> {
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
-        for e in elements.into_iter() {
+        for e in elements.iter_mut() {
             if e.luminance() < min {
                 min = e.luminance();
             }
@@ -146,7 +141,7 @@ impl Model {
                 max = e.luminance();
             }
         }
-        log::info!("Luminance range: [{}, {}]", min, max,);
+        log::info!("Luminance range: [{min}, {max}]");
 
         elements
             .par_iter_mut()

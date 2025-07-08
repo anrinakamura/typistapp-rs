@@ -107,11 +107,7 @@ impl Element {
         let luminance = characteristics.iter().sum::<f64>() / (width * height) as f64;
 
         log::debug!(
-            "Character: '{}', Width: {}, Height: {}, Luminance: {}",
-            character,
-            width,
-            height,
-            luminance
+            "Character: '{character}', Width: {width}, Height: {height}, Luminance: {luminance}"
         );
 
         Ok(Element {
@@ -125,7 +121,7 @@ impl Element {
     /// Creates an element from an image tile by calculating its luminance characteristics.
     pub fn from_image(image: DynamicImage) -> Result<Self> {
         let (width, height) = image.dimensions();
-        log::trace!("Image dimensions: {}x{}", width, height);
+        log::trace!("Image dimensions: {width}x{height}");
         if width == 0 || height == 0 {
             return Err(anyhow!("Image has zero width or height."));
         }

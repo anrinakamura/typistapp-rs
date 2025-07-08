@@ -30,18 +30,18 @@ fn run(args: &Args) -> Result<()> {
     for line in reader.lines() {
         chars.extend(line?.chars());
     }
-    log::debug!("Typeset: {:?}", chars);
+    log::debug!("Typeset: {chars:?}");
 
     let image = image::open(&args.image_path)?;
     log::debug!("Image loaded: {}", args.image_path);
 
     let font_data = std::fs::read(&args.font_path)?;
     let mut m = Model::new(args.length, &image, &chars, &font_data);
-    log::debug!("Model created: {:?}", m);
+    log::debug!("Model created: {m:?}");
 
     let s = m.convert()?;
     for line in &s {
-        log::debug!("{}", line);
+        log::debug!("{line}");
     }
 
     View::animate(&s)?;
