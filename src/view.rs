@@ -8,9 +8,12 @@ use crossterm::{cursor, execute, style::Print, terminal};
 
 use crate::PER_CHARACTER_DELAY_MS;
 
+/// A struct that serves as the View (V) in MVC.
+/// Specializes in displaying the generated typist-art in the terminal.
 pub struct View {}
 
 impl View {
+    /// Animates the given typist art line by line with a per-character delay.
     pub fn animate(data: &[String]) -> std::io::Result<()> {
         let mut stdout = stdout();
 

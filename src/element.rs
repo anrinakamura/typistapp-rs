@@ -6,6 +6,8 @@ use log;
 use crate::color::Color;
 use crate::{F64_ALMOST_ZERO, FULL_WIDTH_SPACE, IMAGE_SIZE};
 
+/// Represents either a character or image tile, along with its
+/// luminance and pixel characteristics used for comparison and matching.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Element {
     characteristics: Vec<f64>,
@@ -15,6 +17,7 @@ pub struct Element {
 }
 
 impl Element {
+    /// Constructs a new Element with the given characteristics and metadata.
     pub fn new(
         characteristics: Vec<f64>,
         luminance: f64,
@@ -29,23 +32,29 @@ impl Element {
         }
     }
 
+    /// Returns the pixel intensity values of the element.
     pub fn characteristics(&self) -> &[f64] {
         &self.characteristics
     }
 
+    /// Returns the average luminance of the element.
     pub fn luminance(&self) -> f64 {
         self.luminance
     }
 
+    /// Returns the character associated with this element, if any.
     pub fn character(&self) -> Option<char> {
         self.character
     }
 
+    /// Returns a reference to the image of this element, if available.
     #[allow(dead_code)]
     pub fn image(&self) -> Option<&DynamicImage> {
         self.image.as_ref()
     }
 
+    /// Creates an element by rendering a character into an image using the provided font and scale,
+    /// then converting it into luminance data.
     pub fn from_char(font: &FontArc, character: char, scale: PxScale) -> Result<Self> {
         let (width, height) = (IMAGE_SIZE, IMAGE_SIZE);
         let mut characteristics = vec![1.0; (width * height) as usize];
@@ -113,6 +122,7 @@ impl Element {
         })
     }
 
+    /// Creates an element from an image tile by calculating its luminance characteristics.
     pub fn from_image(image: DynamicImage) -> Result<Self> {
         let (width, height) = image.dimensions();
         log::trace!("Image dimensions: {}x{}", width, height);
@@ -139,6 +149,8 @@ impl Element {
         })
     }
 
+    /// Normalizes the element's pixel characteristics and luminance
+    /// to fall within the given luminance range.
     pub fn normalized(&mut self, min: f64, max: f64) -> Result<()> {
         if min >= max {
             return Err(anyhow!(
@@ -168,6 +180,7 @@ impl Element {
         Ok(())
     }
 
+    /// Normalizes a single luminance value into the given range.
     fn normalize(value: f64, min: f64, max: f64) -> f64 {
         if max - min < F64_ALMOST_ZERO {
             0.0

@@ -12,7 +12,6 @@ use crate::{FULL_WIDTH_SPACE, GLYPH_SCALE, IMAGE_SIZE, NUM_OF_CANDIDATES};
 /// Converts an image into typist-art using a set of full-width characters and a font.
 #[derive(Debug, Clone)]
 pub struct Model {
-
     /// The source image to be converted to typist-art.
     image: DynamicImage,
 

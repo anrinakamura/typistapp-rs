@@ -2,6 +2,8 @@ use log;
 
 use crate::F64_ALMOST_ZERO;
 
+/// Computes the Pearson correlation coefficient between two vectors of f64 values.
+/// Returns None if the input lengths do not match or are empty.
 pub fn correlation(x_values: &[f64], y_values: &[f64]) -> Option<f64> {
     if x_values.len() != y_values.len() || x_values.is_empty() || y_values.is_empty() {
         return None;
