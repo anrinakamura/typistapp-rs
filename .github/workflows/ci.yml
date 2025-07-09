@@ -1,4 +1,4 @@
-name: rust
+name: ci
 on:
   pull_request:
     branches: [ "main" ]
@@ -8,9 +8,7 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
     - name: Cache Cargo registry
@@ -27,12 +25,12 @@ jobs:
         key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-target-
-    - name: fmt
+    - name: Cargo fmt
       run: cargo fmt --all -- --check
-    - name: clippy
+    - name: Cargo clippy
       run: cargo clippy -- -D warnings
-    - name: build
+    - name: Cargo build
       run: cargo build --verbose
-    - name: test
+    - name: Cargotest
       run: cargo test --verbose -- --nocapture
   
