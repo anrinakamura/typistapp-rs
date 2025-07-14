@@ -15,6 +15,12 @@ struct Args {
 
     #[arg(short, long, default_value = "resources/NotoSansJP-Regular.otf")]
     font_path: String,
+
+    #[arg(short, long)]
+    animate: bool, 
+
+    #[arg(short, long)]
+    html: bool, 
 }
 
 fn main() -> Result<()> {
