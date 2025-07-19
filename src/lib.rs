@@ -16,3 +16,7 @@ const FULL_WIDTH_SPACE: char = '　';
 const PER_CHARACTER_DELAY_MS: u64 = 10;
 
 static GLYPH_SCALE: LazyLock<PxScale> = LazyLock::new(|| PxScale::from(16.0));
+
+pub const TYPESET: &str = include_str!("../assets/typeset.txt");
+pub const FONT_DATA: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/", "NotoSansJP-Regular.otf"));
