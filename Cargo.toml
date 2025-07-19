@@ -1,7 +1,7 @@
 [package]
 name = "typistapp"
 version = "0.1.0"
-authors = ["@anrinakamura"]
+authors = ["anrinakamura"]
 description = "Typist-art generator for TUI"
 edition = "2024"
 license = "MIT"
