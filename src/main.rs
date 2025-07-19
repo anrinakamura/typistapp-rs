@@ -4,6 +4,8 @@ use anyhow::Result;
 use clap::Parser;
 use typistapp::{model::Model, view::View};
 
+const FONT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/", "NotoSansJP-Regular.otf"));
+
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
@@ -13,8 +15,8 @@ struct Args {
     #[arg(short, long, default_value = "resources/monalisa.jpg")]
     image_path: String,
 
-    #[arg(short, long, default_value = "resources/NotoSansJP-Regular.otf")]
-    font_path: String,
+    // #[arg(short, long, default_value = "resources/NotoSansJP-Regular.otf")]
+    // font_path: String,
 }
 
 fn main() -> Result<()> {
@@ -35,8 +37,8 @@ fn run(args: &Args) -> Result<()> {
     let image = image::open(&args.image_path)?;
     log::debug!("Image loaded: {}", args.image_path);
 
-    let font_data = std::fs::read(&args.font_path)?;
-    let mut m = Model::new(args.length, &image, &chars, &font_data)?;
+    // let font_data = std::fs::read(&args.font_path)?;
+    let mut m = Model::new(args.length, &image, &chars, FONT)?;
     log::debug!("Model created: {m:?}");
 
     let s = m.convert()?;
