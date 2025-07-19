@@ -189,14 +189,12 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-
-    const FONT_PATH: &str = "resources/NotoSansJP-Regular.otf";
+    use crate::FONT_DATA;
 
     #[test]
     fn element_from_char() {
-        let font_data = fs::read(FONT_PATH).unwrap();
-        let font = FontArc::try_from_vec(font_data).unwrap();
+        // let font_data = fs::read().unwrap();
+        let font = FontArc::try_from_slice(FONT_DATA).unwrap();
         let scale = PxScale::from(16.0);
         let element = Element::from_char(&font, 'A', scale);
         assert!(element.is_ok());
