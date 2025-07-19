@@ -188,8 +188,8 @@ impl Element {
 
 #[cfg(test)]
 mod tests {
-    use crate::FONT_DATA;
     use super::*;
+    use crate::FONT_DATA;
 
     #[test]
     fn element_from_char() {
