@@ -7,6 +7,7 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/anrinakamura/typistapp-rs"
 keywords = ["ascii-art", "cli", "tui", "terminal"]
+build = "build.rs"
 
 [[bin]]
 name = "typistapp"
@@ -25,3 +26,6 @@ env_logger = "0.11.8"
 image = "0.25.6"
 log = "0.4.27"
 rayon = "1.10.0"
+
+[build-dependencies]
+ureq = "3.0.12"
