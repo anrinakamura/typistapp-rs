@@ -1,10 +1,20 @@
 [package]
 name = "typistapp"
-authors = ["anrinakamura"]
-description = "Typist-art generator for TUI"
-license = "MIT"
 version = "0.1.0"
+authors = ["@anrinakamura"]
+description = "Typist-art generator for TUI"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/anrinakamura/typistapp-rs"
+keywords = ["ascii-art", "cli", "tui", "terminal"]
+
+[[bin]]
+name = "typistapp"
+path = "src/main.rs"
+
+[lib]
+name = "typistapp"
+path = "src/lib.rs"
 
 [dependencies]
 ab_glyph = "0.2.29"
