@@ -26,7 +26,7 @@ typistapp 80 --image ./cat.png
 
 | Argument/Option | Description |
 | :--- | :--- |
-| `length` | (Required) The width of the output ASCII art in characters. Must be between 32 and 128. |
+| `<OUTPUT_WIDTH>` | (Required) The width of the output ASCII art in characters. Must be between 32 and 128. |
 | `-i`, `--image` | (Required) The path to the image file you want to convert. |
 
 ## License
