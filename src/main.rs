@@ -14,9 +14,6 @@ struct Args {
 
     #[arg(short, long, default_value = "resources/monalisa.jpg")]
     image_path: String,
-
-    // #[arg(short, long, default_value = "resources/NotoSansJP-Regular.otf")]
-    // font_path: String,
 }
 
 fn main() -> Result<()> {
@@ -37,7 +34,6 @@ fn run(args: &Args) -> Result<()> {
     let image = image::open(&args.image_path)?;
     log::debug!("Image loaded: {}", args.image_path);
 
-    // let font_data = std::fs::read(&args.font_path)?;
     let mut m = Model::new(args.length, &image, &chars, FONT)?;
     log::debug!("Model created: {m:?}");
 
