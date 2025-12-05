@@ -1,6 +1,6 @@
 # typistapp 
 
-A CLI tool and Rust crate that generates Japanese ASCII art from images and displays it with a typing animation.
+A CLI tool and Rust crate that generates Japanese full-width ASCII art from images and displays it with a typing animation.
 
 ## Features
 
